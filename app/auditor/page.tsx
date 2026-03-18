@@ -1,42 +1,68 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import connectDB from '@/lib/mongodb';
-import Registro from '@/models/Registro';
-import { mockRegistros, mockKPIs } from '@/lib/mock-data';
+'use client';
+import { useState, useEffect } from 'react';
 import KPICard from '@/components/dashboard/KPICard';
 import StatusBadge from '@/components/registros/StatusBadge';
-import { Clock, CheckCircle, XCircle, Activity, MapPin, Truck, Users, TrendingUp } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Activity, Truck, Users, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { RegistroStatus } from '@/types';
+import { mockRegistros, mockKPIs } from '@/lib/mock-data';
+import { getMockStatus } from '@/lib/mock-status';
 
-export default async function AuditorDashboard() {
-  await getServerSession(authOptions);
+export default function AuditorDashboard() {
+  const [data, setData] = useState({
+    pendientes: mockKPIs.pendientes,
+    aprobados: mockKPIs.aprobados,
+    rechazados: mockKPIs.rechazados,
+    hhTotales: mockKPIs.hhTotales,
+    hhCampo: mockKPIs.hhCampo,
+    kmTotales: mockKPIs.kmTotales,
+    ultimosPendientes: mockRegistros.filter(r => r.status === 'pre_aprobado') as any[],
+  });
 
-  let pendientes = mockKPIs.pendientes;
-  let aprobados = mockKPIs.aprobados;
-  let rechazados = mockKPIs.rechazados;
-  let ultimosPendientes: any[] = mockRegistros.filter(r => r.status === 'pre_aprobado');
-  let k = { hhTotales: mockKPIs.hhTotales, hhCampo: mockKPIs.hhCampo, kmTotales: mockKPIs.kmTotales, total: mockKPIs.aprobados };
+  useEffect(() => {
+    const mockStatus = getMockStatus();
 
-  try {
-    await connectDB();
-    const [p, a, r, u, kpis] = await Promise.all([
-      Registro.countDocuments({ status: 'pre_aprobado' }),
-      Registro.countDocuments({ status: 'aprobado' }),
-      Registro.countDocuments({ status: 'rechazado' }),
-      Registro.find({ status: 'pre_aprobado' }).sort({ createdAt: -1 }).limit(6).lean(),
-      Registro.aggregate([
-        { $match: { status: 'aprobado', excluirDeMetricas: { $ne: true } } },
-        { $group: { _id: null, hhTotales: { $sum: '$horasTotalesDec' }, hhCampo: { $sum: '$horasSitioDec' }, kmTotales: { $sum: '$kmRecorridos' }, total: { $sum: 1 } } },
-      ]),
-    ]);
-    pendientes = p; aprobados = a; rechazados = r; ultimosPendientes = u;
-    k = kpis[0] || { hhTotales: 0, hhCampo: 0, kmTotales: 0, total: 0 };
-  } catch { /* sin DB — usa mock */ }
+    // Aplicar overrides de localStorage sobre datos mock
+    const withOverrides = mockRegistros.map(r => {
+      const override = mockStatus[r._id];
+      return override ? { ...r, status: override.status } : r;
+    });
 
-  const productividad = k.hhTotales > 0 ? Math.round((k.hhCampo / k.hhTotales) * 100) : 0;
+    const pendientes = withOverrides.filter(r => r.status === 'pre_aprobado').length;
+    const aprobados = withOverrides.filter(r => r.status === 'aprobado').length;
+    const rechazados = withOverrides.filter(r => r.status === 'rechazado').length;
+    const aprobadosData = withOverrides.filter(r => r.status === 'aprobado');
+    const hhTotales = aprobadosData.reduce((s, r) => s + r.horasTotalesDec, 0);
+    const hhCampo = aprobadosData.reduce((s, r) => s + r.horasSitioDec, 0);
+    const kmTotales = aprobadosData.reduce((s, r) => s + r.kmRecorridos, 0);
+    const ultimosPendientes = withOverrides.filter(r => r.status === 'pre_aprobado').slice(0, 6);
+
+    // Intentar obtener datos reales de la API
+    fetch('/api/metricas')
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          setData({
+            pendientes: res.data.pendientes ?? pendientes,
+            aprobados: res.data.aprobados ?? aprobados,
+            rechazados: res.data.rechazados ?? rechazados,
+            hhTotales: res.data.hhTotales ?? hhTotales,
+            hhCampo: res.data.hhCampo ?? hhCampo,
+            kmTotales: res.data.kmTotales ?? kmTotales,
+            ultimosPendientes,
+          });
+        } else {
+          setData({ pendientes, aprobados, rechazados, hhTotales, hhCampo, kmTotales, ultimosPendientes });
+        }
+      })
+      .catch(() => {
+        setData({ pendientes, aprobados, rechazados, hhTotales, hhCampo, kmTotales, ultimosPendientes });
+      });
+  }, []);
+
+  const productividad = data.hhTotales > 0 ? Math.round((data.hhCampo / data.hhTotales) * 100) : 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -45,31 +71,29 @@ export default async function AuditorDashboard() {
         <p className="text-sm mt-1" style={{ color: '#8b949e' }}>Panel de control operativo</p>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <KPICard icon={Clock} title="Pendientes de aprobación" value={pendientes} color="#9e6a03" subtitle="Requieren revisión" />
-        <KPICard icon={CheckCircle} title="Aprobados" value={aprobados} color="#238636" />
-        <KPICard icon={XCircle} title="Rechazados" value={rechazados} color="#da3633" />
+        <KPICard icon={Clock} title="Pendientes de aprobación" value={data.pendientes} color="#9e6a03" subtitle="Requieren revisión" />
+        <KPICard icon={CheckCircle} title="Aprobados" value={data.aprobados} color="#238636" />
+        <KPICard icon={XCircle} title="Rechazados" value={data.rechazados} color="#da3633" />
         <KPICard icon={Activity} title="Productividad" value={`${productividad}%`} color="#1d6fb8" subtitle="HH campo / HH totales" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        <KPICard icon={Users} title="HH Totales aprobadas" value={Math.round(k.hhTotales * 10) / 10} unit="h" color="#1d6fb8" />
-        <KPICard icon={TrendingUp} title="HH en Campo" value={Math.round(k.hhCampo * 10) / 10} unit="h" color="#238636" />
-        <KPICard icon={Truck} title="KM Totales" value={Math.round(k.kmTotales).toLocaleString('es-AR')} unit="km" color="#8b949e" />
+        <KPICard icon={Users} title="HH Totales aprobadas" value={Math.round(data.hhTotales * 10) / 10} unit="h" color="#1d6fb8" />
+        <KPICard icon={TrendingUp} title="HH en Campo" value={Math.round(data.hhCampo * 10) / 10} unit="h" color="#238636" />
+        <KPICard icon={Truck} title="KM Totales" value={Math.round(data.kmTotales).toLocaleString('es-AR')} unit="km" color="#8b949e" />
       </div>
 
-      {/* Pendientes */}
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #21262d' }}>
           <div className="flex items-center gap-2">
             <h2 className="font-semibold text-white">Pendientes de aprobación</h2>
-            {pendientes > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#9e6a03', color: 'white' }}>{pendientes}</span>
+            {data.pendientes > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#9e6a03', color: 'white' }}>{data.pendientes}</span>
             )}
           </div>
           <Link href="/auditor/aprobaciones" className="text-sm" style={{ color: '#1d6fb8' }}>Ver todos →</Link>
         </div>
-        {ultimosPendientes.length === 0 ? (
+        {data.ultimosPendientes.length === 0 ? (
           <div className="px-5 py-10 text-center">
             <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-40" style={{ color: '#238636' }} />
             <p className="text-white font-medium">Todo al día</p>
@@ -77,7 +101,7 @@ export default async function AuditorDashboard() {
           </div>
         ) : (
           <div className="divide-y" style={{ borderColor: '#21262d' }}>
-            {ultimosPendientes.map((r: any) => (
+            {data.ultimosPendientes.map((r: any) => (
               <Link
                 key={r._id.toString()}
                 href={`/auditor/aprobaciones/${r._id}`}

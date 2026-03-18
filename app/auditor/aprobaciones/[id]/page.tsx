@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { IRegistro, RegistroStatus } from '@/types';
 import Link from 'next/link';
+import { getMockStatus, setMockStatus } from '@/lib/mock-status';
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
   if (!value && value !== 0) return null;
@@ -33,7 +34,7 @@ export default function AprobacionDetailPage() {
         // Si es mock, aplicar estado persistido en localStorage
         const data = res.data;
         if (typeof id === 'string' && id.startsWith('m')) {
-          const stored = JSON.parse(localStorage.getItem('elite_mock_status') || '{}');
+          const stored = getMockStatus();
           if (stored[id]) {
             data.status = stored[id].status;
             data.rechazadoMotivo = stored[id].motivo;
@@ -64,9 +65,7 @@ export default function AprobacionDetailPage() {
 
       // Persistir en localStorage para mock IDs
       if (typeof id === 'string' && id.startsWith('m')) {
-        const stored = JSON.parse(localStorage.getItem('elite_mock_status') || '{}');
-        stored[id] = { status: newStatus, motivo, at: now };
-        localStorage.setItem('elite_mock_status', JSON.stringify(stored));
+        setMockStatus(id, newStatus as 'aprobado' | 'rechazado', motivo);
       }
 
       // Actualizar el estado local para que se vea el cambio inmediatamente

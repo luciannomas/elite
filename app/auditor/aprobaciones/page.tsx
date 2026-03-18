@@ -1,23 +1,50 @@
-import connectDB from '@/lib/mongodb';
-import Registro from '@/models/Registro';
-import { mockRegistros } from '@/lib/mock-data';
+'use client';
+import { useState, useEffect } from 'react';
 import StatusBadge from '@/components/registros/StatusBadge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Link from 'next/link';
 import type { RegistroStatus } from '@/types';
 import { ChevronRight } from 'lucide-react';
-import MockFilter from '@/components/aprobaciones/MockFilter';
+import { mockRegistros } from '@/lib/mock-data';
+import { getMockStatus } from '@/lib/mock-status';
 
-export default async function AprobacionesPage() {
-  let pendientes: any[] = mockRegistros.filter(r => r.status === 'pre_aprobado');
-  try {
-    await connectDB();
-    pendientes = await Registro.find({ status: 'pre_aprobado' })
-      .sort({ createdAt: -1 })
-      .populate('submittedBy', 'name')
-      .lean();
-  } catch { /* sin DB — usa mock */ }
+export default function AprobacionesPage() {
+  const [pendientes, setPendientes] = useState<any[]>([]);
+
+  useEffect(() => {
+    const mockStatus = getMockStatus();
+
+    // Intentar cargar desde API
+    fetch('/api/registros?status=pre_aprobado')
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data?.length > 0) {
+          // Con DB: filtrar los que siguen pendientes
+          const data = res.data.filter((r: any) => {
+            const id = String(r._id);
+            const override = mockStatus[id]?.status;
+            return !override; // si hay override, fue procesado → excluir de pendientes
+          });
+          setPendientes(data);
+        } else {
+          // Sin DB: usar mock + aplicar overrides de localStorage
+          const data = mockRegistros.filter(r => {
+            const override = mockStatus[r._id]?.status;
+            return !override; // si hay override, fue procesado → excluir de pendientes
+          });
+          setPendientes(data);
+        }
+      })
+      .catch(() => {
+        const mockStatus = getMockStatus();
+        const data = mockRegistros.filter(r => {
+          const override = mockStatus[r._id]?.status;
+          return !override;
+        });
+        setPendientes(data);
+      });
+  }, []);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -35,17 +62,14 @@ export default async function AprobacionesPage() {
         </div>
       ) : (
         <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
-          <MockFilter />
           <div className="divide-y" style={{ borderColor: '#21262d' }}>
             {pendientes.map((r: any) => (
               <Link
                 key={r._id.toString()}
                 href={`/auditor/aprobaciones/${r._id}`}
-                data-mock-id={String(r._id).startsWith('m') ? r._id : undefined}
                 className="flex items-start justify-between px-5 py-4 hover:bg-[#1c2128] transition-colors gap-3"
               >
                 <div className="flex-1 min-w-0">
-                  {/* Fila 1: título + badges */}
                   <div className="flex flex-wrap items-center gap-2 mb-1">
                     <p className="text-sm font-semibold text-white leading-snug">
                       {r.proyectoNombre || '—'} — {r.clienteNombre || '—'}
@@ -53,12 +77,10 @@ export default async function AprobacionesPage() {
                     <span className="text-xs px-2 py-0.5 rounded shrink-0" style={{ backgroundColor: '#21262d', color: '#8b949e' }}>
                       {r.trabajoRealizadoEn === 'campo' ? 'Campo' : 'Taller'}
                     </span>
-                    {/* StatusBadge visible solo en mobile, dentro del contenido */}
                     <span className="sm:hidden shrink-0">
                       <StatusBadge status={r.status as RegistroStatus} />
                     </span>
                   </div>
-                  {/* Fila 2: metadata */}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" style={{ color: '#8b949e' }}>
                     <span>{format(new Date(r.fecha), 'dd MMM yyyy', { locale: es })}</span>
                     <span>·</span>
@@ -68,15 +90,13 @@ export default async function AprobacionesPage() {
                     {r.horasTotalesDec && <><span>·</span><span>{r.horasTotalesDec}h</span></>}
                   </div>
                   <p className="text-xs mt-1" style={{ color: '#8b949e' }}>
-                    Por: {(r.submittedBy as any)?.name || '—'} · {format(new Date(r.createdAt), 'dd/MM HH:mm', { locale: es })}
+                    Por: {r.submittedBy?.name || '—'} · {format(new Date(r.createdAt), 'dd/MM HH:mm', { locale: es })}
                   </p>
                 </div>
-                {/* Derecha: badge + chevron — oculto en mobile, visible en sm+ */}
                 <div className="hidden sm:flex items-center gap-3 shrink-0 mt-0.5">
                   <StatusBadge status={r.status as RegistroStatus} />
                   <ChevronRight className="w-4 h-4" style={{ color: '#8b949e' }} />
                 </div>
-                {/* Chevron solo en mobile */}
                 <ChevronRight className="sm:hidden w-4 h-4 shrink-0 mt-1" style={{ color: '#8b949e' }} />
               </Link>
             ))}
