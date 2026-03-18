@@ -1,5 +1,6 @@
 import connectDB from '@/lib/mongodb';
 import Registro from '@/models/Registro';
+import { mockRegistros } from '@/lib/mock-data';
 import StatusBadge from '@/components/registros/StatusBadge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -8,14 +9,14 @@ import type { RegistroStatus } from '@/types';
 import { ChevronRight } from 'lucide-react';
 
 export default async function AprobacionesPage() {
-  let pendientes: any[] = [];
+  let pendientes: any[] = mockRegistros.filter(r => r.status === 'pre_aprobado');
   try {
     await connectDB();
     pendientes = await Registro.find({ status: 'pre_aprobado' })
       .sort({ createdAt: -1 })
       .populate('submittedBy', 'name')
       .lean();
-  } catch { /* sin DB */ }
+  } catch { /* sin DB — usa mock */ }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

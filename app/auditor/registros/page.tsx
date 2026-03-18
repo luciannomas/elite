@@ -1,5 +1,6 @@
 import connectDB from '@/lib/mongodb';
 import Registro from '@/models/Registro';
+import { mockRegistros } from '@/lib/mock-data';
 import StatusBadge from '@/components/registros/StatusBadge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -11,7 +12,11 @@ export default async function AllRegistrosPage({ searchParams }: { searchParams:
   const filter: any = {};
   if (params.status && params.status !== 'todos') filter.status = params.status;
 
-  let registros: any[] = [];
+  const mockFiltrado = params.status && params.status !== 'todos'
+    ? mockRegistros.filter(r => r.status === params.status)
+    : mockRegistros;
+
+  let registros: any[] = mockFiltrado;
   try {
     await connectDB();
     registros = await Registro.find(filter)
@@ -19,7 +24,7 @@ export default async function AllRegistrosPage({ searchParams }: { searchParams:
       .limit(100)
       .populate('submittedBy', 'name')
       .lean();
-  } catch { /* sin DB */ }
+  } catch { /* sin DB — usa mock */ }
 
   const tabs = [
     { label: 'Todos', value: 'todos' },

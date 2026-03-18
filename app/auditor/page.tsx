@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import connectDB from '@/lib/mongodb';
 import Registro from '@/models/Registro';
+import { mockRegistros, mockKPIs } from '@/lib/mock-data';
 import KPICard from '@/components/dashboard/KPICard';
 import StatusBadge from '@/components/registros/StatusBadge';
 import { Clock, CheckCircle, XCircle, Activity, MapPin, Truck, Users, TrendingUp } from 'lucide-react';
@@ -13,9 +14,11 @@ import type { RegistroStatus } from '@/types';
 export default async function AuditorDashboard() {
   await getServerSession(authOptions);
 
-  let pendientes = 0, aprobados = 0, rechazados = 0;
-  let ultimosPendientes: any[] = [];
-  let k = { hhTotales: 0, hhCampo: 0, kmTotales: 0, total: 0 };
+  let pendientes = mockKPIs.pendientes;
+  let aprobados = mockKPIs.aprobados;
+  let rechazados = mockKPIs.rechazados;
+  let ultimosPendientes: any[] = mockRegistros.filter(r => r.status === 'pre_aprobado');
+  let k = { hhTotales: mockKPIs.hhTotales, hhCampo: mockKPIs.hhCampo, kmTotales: mockKPIs.kmTotales, total: mockKPIs.aprobados };
 
   try {
     await connectDB();
@@ -30,8 +33,8 @@ export default async function AuditorDashboard() {
       ]),
     ]);
     pendientes = p; aprobados = a; rechazados = r; ultimosPendientes = u;
-    k = kpis[0] || k;
-  } catch { /* sin DB — muestra ceros */ }
+    k = kpis[0] || { hhTotales: 0, hhCampo: 0, kmTotales: 0, total: 0 };
+  } catch { /* sin DB — usa mock */ }
 
   const productividad = k.hhTotales > 0 ? Math.round((k.hhCampo / k.hhTotales) * 100) : 0;
 

@@ -4,6 +4,7 @@ import { ClipboardList, Clock, CheckCircle, XCircle, Plus } from 'lucide-react';
 import KPICard from '@/components/dashboard/KPICard';
 import connectDB from '@/lib/mongodb';
 import Registro from '@/models/Registro';
+import { mockRegistros } from '@/lib/mock-data';
 import StatusBadge from '@/components/registros/StatusBadge';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -13,8 +14,12 @@ import type { RegistroStatus } from '@/types';
 export default async function JefeDashboard() {
   const session = await getServerSession(authOptions);
 
-  let total = 0, pendientes = 0, aprobados = 0, rechazados = 0;
-  let ultimos: any[] = [];
+  const mockUltimos = mockRegistros.slice(0, 5);
+  let total = mockRegistros.length;
+  let pendientes = mockRegistros.filter(r => r.status === 'pre_aprobado').length;
+  let aprobados = mockRegistros.filter(r => r.status === 'aprobado').length;
+  let rechazados = mockRegistros.filter(r => r.status === 'rechazado').length;
+  let ultimos: any[] = mockUltimos;
 
   try {
     await connectDB();
@@ -26,7 +31,7 @@ export default async function JefeDashboard() {
       Registro.find({ submittedBy: session?.user.id }).sort({ createdAt: -1 }).limit(5).lean(),
     ]);
     total = t; pendientes = p; aprobados = a; rechazados = r; ultimos = u;
-  } catch { /* sin DB — muestra ceros */ }
+  } catch { /* sin DB — usa mock */ }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
