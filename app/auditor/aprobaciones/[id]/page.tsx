@@ -59,14 +59,28 @@ export default function AprobacionDetailPage() {
     });
     const json = await res.json();
     if (json.success) {
-      // Si es mock, persistir el estado en localStorage
+      const newStatus = action === 'aprobar' ? 'aprobado' : 'rechazado';
+      const now = new Date().toISOString();
+
+      // Persistir en localStorage para mock IDs
       if (typeof id === 'string' && id.startsWith('m')) {
         const stored = JSON.parse(localStorage.getItem('elite_mock_status') || '{}');
-        stored[id] = { status: action === 'aprobar' ? 'aprobado' : 'rechazado', motivo, at: new Date().toISOString() };
+        stored[id] = { status: newStatus, motivo, at: now };
         localStorage.setItem('elite_mock_status', JSON.stringify(stored));
       }
-      toast.success(action === 'aprobar' ? 'Registro aprobado exitosamente' : 'Registro rechazado');
-      router.push('/auditor/aprobaciones');
+
+      // Actualizar el estado local para que se vea el cambio inmediatamente
+      setRegistro(prev => prev ? {
+        ...prev,
+        status: newStatus as any,
+        rechazadoMotivo: action === 'rechazar' ? motivo : undefined,
+        approvedAt: now,
+      } : null);
+
+      toast.success(action === 'aprobar' ? 'Registro aprobado ✓' : 'Registro rechazado');
+      setActing(null);
+      // Redirigir después de 1.5s para que el usuario vea el nuevo estado
+      setTimeout(() => router.push('/auditor/aprobaciones'), 1500);
     } else {
       toast.error(json.error || 'Error al procesar');
       setActing(null);
