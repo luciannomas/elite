@@ -12,28 +12,27 @@ import type { RegistroStatus } from '@/types';
 
 export default async function AuditorDashboard() {
   await getServerSession(authOptions);
-  await connectDB();
 
-  const [pendientes, aprobados, rechazados, ultimosPendientes, kpis] = await Promise.all([
-    Registro.countDocuments({ status: 'pre_aprobado' }),
-    Registro.countDocuments({ status: 'aprobado' }),
-    Registro.countDocuments({ status: 'rechazado' }),
-    Registro.find({ status: 'pre_aprobado' }).sort({ createdAt: -1 }).limit(6).lean(),
-    Registro.aggregate([
-      { $match: { status: 'aprobado', excluirDeMetricas: { $ne: true } } },
-      {
-        $group: {
-          _id: null,
-          hhTotales: { $sum: '$horasTotalesDec' },
-          hhCampo: { $sum: '$horasSitioDec' },
-          kmTotales: { $sum: '$kmRecorridos' },
-          total: { $sum: 1 },
-        },
-      },
-    ]),
-  ]);
+  let pendientes = 0, aprobados = 0, rechazados = 0;
+  let ultimosPendientes: any[] = [];
+  let k = { hhTotales: 0, hhCampo: 0, kmTotales: 0, total: 0 };
 
-  const k = kpis[0] || { hhTotales: 0, hhCampo: 0, kmTotales: 0, total: 0 };
+  try {
+    await connectDB();
+    const [p, a, r, u, kpis] = await Promise.all([
+      Registro.countDocuments({ status: 'pre_aprobado' }),
+      Registro.countDocuments({ status: 'aprobado' }),
+      Registro.countDocuments({ status: 'rechazado' }),
+      Registro.find({ status: 'pre_aprobado' }).sort({ createdAt: -1 }).limit(6).lean(),
+      Registro.aggregate([
+        { $match: { status: 'aprobado', excluirDeMetricas: { $ne: true } } },
+        { $group: { _id: null, hhTotales: { $sum: '$horasTotalesDec' }, hhCampo: { $sum: '$horasSitioDec' }, kmTotales: { $sum: '$kmRecorridos' }, total: { $sum: 1 } } },
+      ]),
+    ]);
+    pendientes = p; aprobados = a; rechazados = r; ultimosPendientes = u;
+    k = kpis[0] || k;
+  } catch { /* sin DB — muestra ceros */ }
+
   const productividad = k.hhTotales > 0 ? Math.round((k.hhCampo / k.hhTotales) * 100) : 0;
 
   return (

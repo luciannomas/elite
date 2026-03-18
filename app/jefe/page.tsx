@@ -12,15 +12,21 @@ import type { RegistroStatus } from '@/types';
 
 export default async function JefeDashboard() {
   const session = await getServerSession(authOptions);
-  await connectDB();
 
-  const [total, pendientes, aprobados, rechazados, ultimos] = await Promise.all([
-    Registro.countDocuments({ submittedBy: session?.user.id }),
-    Registro.countDocuments({ submittedBy: session?.user.id, status: 'pre_aprobado' }),
-    Registro.countDocuments({ submittedBy: session?.user.id, status: 'aprobado' }),
-    Registro.countDocuments({ submittedBy: session?.user.id, status: 'rechazado' }),
-    Registro.find({ submittedBy: session?.user.id }).sort({ createdAt: -1 }).limit(5).lean(),
-  ]);
+  let total = 0, pendientes = 0, aprobados = 0, rechazados = 0;
+  let ultimos: any[] = [];
+
+  try {
+    await connectDB();
+    const [t, p, a, r, u] = await Promise.all([
+      Registro.countDocuments({ submittedBy: session?.user.id }),
+      Registro.countDocuments({ submittedBy: session?.user.id, status: 'pre_aprobado' }),
+      Registro.countDocuments({ submittedBy: session?.user.id, status: 'aprobado' }),
+      Registro.countDocuments({ submittedBy: session?.user.id, status: 'rechazado' }),
+      Registro.find({ submittedBy: session?.user.id }).sort({ createdAt: -1 }).limit(5).lean(),
+    ]);
+    total = t; pendientes = p; aprobados = a; rechazados = r; ultimos = u;
+  } catch { /* sin DB — muestra ceros */ }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

@@ -7,16 +7,19 @@ import type { RegistroStatus } from '@/types';
 import Link from 'next/link';
 
 export default async function AllRegistrosPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  await connectDB();
   const params = await searchParams;
   const filter: any = {};
   if (params.status && params.status !== 'todos') filter.status = params.status;
 
-  const registros = await Registro.find(filter)
-    .sort({ fecha: -1 })
-    .limit(100)
-    .populate('submittedBy', 'name')
-    .lean();
+  let registros: any[] = [];
+  try {
+    await connectDB();
+    registros = await Registro.find(filter)
+      .sort({ fecha: -1 })
+      .limit(100)
+      .populate('submittedBy', 'name')
+      .lean();
+  } catch { /* sin DB */ }
 
   const tabs = [
     { label: 'Todos', value: 'todos' },

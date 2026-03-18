@@ -8,11 +8,14 @@ import type { RegistroStatus } from '@/types';
 import { ChevronRight } from 'lucide-react';
 
 export default async function AprobacionesPage() {
-  await connectDB();
-  const pendientes = await Registro.find({ status: 'pre_aprobado' })
-    .sort({ createdAt: -1 })
-    .populate('submittedBy', 'name')
-    .lean();
+  let pendientes: any[] = [];
+  try {
+    await connectDB();
+    pendientes = await Registro.find({ status: 'pre_aprobado' })
+      .sort({ createdAt: -1 })
+      .populate('submittedBy', 'name')
+      .lean();
+  } catch { /* sin DB */ }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
