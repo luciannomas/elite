@@ -12,7 +12,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ success: false, error: 'Sin permisos' }, { status: 403 });
     }
 
-    await connectDB();
     const { id } = await params;
     const { action, motivo } = await req.json();
 
@@ -20,6 +19,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ success: false, error: 'Acción inválida' }, { status: 400 });
     }
 
+    // ID de mock — responder éxito sin tocar DB (cliente persiste en localStorage)
+    if (id.startsWith('m')) {
+      return NextResponse.json({
+        success: true,
+        data: { _id: id, status: action === 'aprobar' ? 'aprobado' : 'rechazado', mock: true },
+      });
+    }
+
+    await connectDB();
     const update: any = action === 'aprobar'
       ? { status: 'aprobado', approvedBy: session.user.id, approvedAt: new Date(), rechazadoMotivo: undefined }
       : { status: 'rechazado', rechazadoMotivo: motivo || 'Sin motivo especificado', approvedBy: undefined, approvedAt: undefined };

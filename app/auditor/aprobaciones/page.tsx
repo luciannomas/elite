@@ -7,6 +7,7 @@ import { es } from 'date-fns/locale';
 import Link from 'next/link';
 import type { RegistroStatus } from '@/types';
 import { ChevronRight } from 'lucide-react';
+import MockFilter from '@/components/aprobaciones/MockFilter';
 
 export default async function AprobacionesPage() {
   let pendientes: any[] = mockRegistros.filter(r => r.status === 'pre_aprobado');
@@ -34,11 +35,13 @@ export default async function AprobacionesPage() {
         </div>
       ) : (
         <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
+          <MockFilter />
           <div className="divide-y" style={{ borderColor: '#21262d' }}>
             {pendientes.map((r: any) => (
               <Link
                 key={r._id.toString()}
                 href={`/auditor/aprobaciones/${r._id}`}
+                data-mock-id={String(r._id).startsWith('m') ? r._id : undefined}
                 className="flex items-start justify-between px-5 py-4 hover:bg-[#1c2128] transition-colors gap-3"
               >
                 <div className="flex-1 min-w-0">

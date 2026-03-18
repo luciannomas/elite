@@ -29,7 +29,19 @@ export default function AprobacionDetailPage() {
 
   useEffect(() => {
     fetch(`/api/registros/${id}`).then(r => r.json()).then(res => {
-      if (res.success) setRegistro(res.data);
+      if (res.success) {
+        // Si es mock, aplicar estado persistido en localStorage
+        const data = res.data;
+        if (typeof id === 'string' && id.startsWith('m')) {
+          const stored = JSON.parse(localStorage.getItem('elite_mock_status') || '{}');
+          if (stored[id]) {
+            data.status = stored[id].status;
+            data.rechazadoMotivo = stored[id].motivo;
+            data.approvedAt = stored[id].at;
+          }
+        }
+        setRegistro(data);
+      }
       setLoading(false);
     });
   }, [id]);
@@ -47,6 +59,12 @@ export default function AprobacionDetailPage() {
     });
     const json = await res.json();
     if (json.success) {
+      // Si es mock, persistir el estado en localStorage
+      if (typeof id === 'string' && id.startsWith('m')) {
+        const stored = JSON.parse(localStorage.getItem('elite_mock_status') || '{}');
+        stored[id] = { status: action === 'aprobar' ? 'aprobado' : 'rechazado', motivo, at: new Date().toISOString() };
+        localStorage.setItem('elite_mock_status', JSON.stringify(stored));
+      }
       toast.success(action === 'aprobar' ? 'Registro aprobado exitosamente' : 'Registro rechazado');
       router.push('/auditor/aprobaciones');
     } else {
