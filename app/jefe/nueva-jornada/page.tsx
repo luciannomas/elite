@@ -152,6 +152,7 @@ export default function NuevaJornadaPage() {
   const [data, setData] = useState(initialData);
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [personalSearch, setPersonalSearch] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -164,16 +165,26 @@ export default function NuevaJornadaPage() {
     const cached = localStorage.getItem('elite_catalog');
     const ts = localStorage.getItem('elite_catalog_ts');
     if (cached && ts && Date.now() - parseInt(ts) < 86400000) {
-      setCatalog(JSON.parse(cached));
-      return;
-    }
-    fetch('/api/catalogo').then(r => r.json()).then(res => {
-      if (res.success) {
-        setCatalog(res.data);
-        localStorage.setItem('elite_catalog', JSON.stringify(res.data));
-        localStorage.setItem('elite_catalog_ts', Date.now().toString());
+      const parsed = JSON.parse(cached);
+      // Invalidar caché si los datos críticos están vacíos
+      if (parsed?.personal?.length > 0 && parsed?.clientes?.length > 0) {
+        setCatalog(parsed);
+        setCatalogLoading(false);
+        return;
       }
-    });
+      localStorage.removeItem('elite_catalog');
+      localStorage.removeItem('elite_catalog_ts');
+    }
+    fetch('/api/catalogo')
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          setCatalog(res.data);
+          localStorage.setItem('elite_catalog', JSON.stringify(res.data));
+          localStorage.setItem('elite_catalog_ts', Date.now().toString());
+        }
+      })
+      .finally(() => setCatalogLoading(false));
   }, []);
 
   const filteredProyectos = catalog?.proyectos.filter(p =>
@@ -313,7 +324,8 @@ export default function NuevaJornadaPage() {
           <SelectField
             label="Cliente" value={data.clienteNombre}
             onChange={(v: string) => { set('clienteNombre')(v); set('proyectoNombre')(''); }}
-            options={catalog?.clientes.map(c => c.nombre) || []} placeholder="Seleccionar cliente..."
+            options={catalog?.clientes.map(c => c.nombre) || []}
+            placeholder={catalogLoading ? 'Cargando...' : 'Seleccionar cliente...'}
             required error={errors.clienteNombre}
           />
 
@@ -323,8 +335,9 @@ export default function NuevaJornadaPage() {
               value={data.proyectoNombre}
               onChange={e => set('proyectoNombre')(e.target.value)}
               style={{ ...getInputStyle(), appearance: 'none' }}
+              disabled={catalogLoading}
             >
-              <option value="">Seleccionar proyecto...</option>
+              <option value="">{catalogLoading ? 'Cargando...' : 'Seleccionar proyecto...'}</option>
               {filteredProyectos.map(p => (
                 <option key={p._id} value={p.nombre}>{p.nombre}</option>
               ))}
@@ -333,7 +346,9 @@ export default function NuevaJornadaPage() {
 
           <SelectField
             label="Tipo de tarea realizada" value={data.tipoProyecto} onChange={set('tipoProyecto')}
-            options={catalog?.tiposProyecto || []} required error={errors.tipoProyecto}
+            options={catalog?.tiposProyecto || []}
+            placeholder={catalogLoading ? 'Cargando...' : 'Seleccionar...'}
+            required error={errors.tipoProyecto}
           />
 
           <TextAreaField
@@ -350,51 +365,64 @@ export default function NuevaJornadaPage() {
         <div style={cardStyle} className="space-y-5">
           <h2 className="text-lg font-semibold text-white mb-2">Personal y Vehículo</h2>
 
-          <SelectField
-            label="Encargado de cuadrilla" value={data.encargadoNombre} onChange={set('encargadoNombre')}
-            options={catalog?.personal.map(p => p.nombre) || []} required error={errors.encargadoNombre}
-          />
-
-          <div>
-            <FieldLabel>Personal a cargo</FieldLabel>
-            <input
-              type="text"
-              placeholder="Buscar personal..."
-              value={personalSearch}
-              onChange={e => setPersonalSearch(e.target.value)}
-              style={{ ...getInputStyle(), marginBottom: 8 }}
-            />
-            {personalSeleccionado.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {personalSeleccionado.map(nombre => (
-                  <span
-                    key={nombre}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                    style={{ backgroundColor: 'rgba(29,111,184,0.2)', color: '#58a6ff', border: '1px solid rgba(29,111,184,0.3)' }}
-                  >
-                    {nombre}
-                    <button onClick={() => togglePersonal(nombre)} className="opacity-70 hover:opacity-100">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="rounded-lg overflow-hidden max-h-44 overflow-y-auto" style={{ border: '1px solid #30363d' }}>
-              {(catalog?.personal || [])
-                .filter(p => !personalSearch || p.nombre.toLowerCase().includes(personalSearch.toLowerCase()))
-                .filter(p => p.nombre !== data.encargadoNombre)
-                .map(p => (
-                  <button
-                    key={p._id}
-                    onClick={() => togglePersonal(p.nombre)}
-                    className="flex items-center justify-between w-full px-3 py-2 text-sm text-left transition-colors hover:bg-[#1c2128]"
-                    style={{ color: personalSeleccionado.includes(p.nombre) ? '#58a6ff' : '#e6edf3', borderBottom: '1px solid #21262d' }}
-                  >
-                    {p.nombre}
-                    {personalSeleccionado.includes(p.nombre) && <Check className="w-4 h-4" />}
-                  </button>
-                ))}
+          {catalogLoading ? (
+            <div className="flex items-center gap-2 py-4" style={{ color: '#8b949e' }}>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Cargando personal...</span>
             </div>
-          </div>
+          ) : (
+            <>
+              <SelectField
+                label="Encargado de cuadrilla" value={data.encargadoNombre} onChange={set('encargadoNombre')}
+                options={catalog?.personal.map(p => p.nombre) || []} placeholder="Seleccionar encargado..."
+                required error={errors.encargadoNombre}
+              />
+
+              <div>
+                <FieldLabel>Personal a cargo</FieldLabel>
+                <input
+                  type="text"
+                  placeholder="Buscar personal..."
+                  value={personalSearch}
+                  onChange={e => setPersonalSearch(e.target.value)}
+                  style={{ ...getInputStyle(), marginBottom: 8 }}
+                />
+                {personalSeleccionado.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {personalSeleccionado.map(nombre => (
+                      <span
+                        key={nombre}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: 'rgba(29,111,184,0.2)', color: '#58a6ff', border: '1px solid rgba(29,111,184,0.3)' }}
+                      >
+                        {nombre}
+                        <button onClick={() => togglePersonal(nombre)} className="opacity-70 hover:opacity-100">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="rounded-lg overflow-hidden max-h-44 overflow-y-auto" style={{ border: '1px solid #30363d' }}>
+                  {(catalog?.personal || [])
+                    .filter(p => !personalSearch || p.nombre.toLowerCase().includes(personalSearch.toLowerCase()))
+                    .filter(p => p.nombre !== data.encargadoNombre)
+                    .map(p => (
+                      <button
+                        key={p._id}
+                        onClick={() => togglePersonal(p.nombre)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-sm text-left transition-colors hover:bg-[#1c2128]"
+                        style={{ color: personalSeleccionado.includes(p.nombre) ? '#58a6ff' : '#e6edf3', borderBottom: '1px solid #21262d' }}
+                      >
+                        {p.nombre}
+                        {personalSeleccionado.includes(p.nombre) && <Check className="w-4 h-4" />}
+                      </button>
+                    ))}
+                </div>
+                {(catalog?.personal || []).filter(p => p.nombre !== data.encargadoNombre).length === 0 && !personalSearch && (
+                  <p className="text-sm text-center py-2" style={{ color: '#8b949e' }}>No hay personal disponible</p>
+                )}
+              </div>
+            </>
+          )}
 
           <SelectField
             label="Vehículo" value={data.vehiculoPatente} onChange={set('vehiculoPatente')}
