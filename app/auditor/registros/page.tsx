@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { RegistroStatus } from '@/types';
 import Link from 'next/link';
+
 const tabs = [
   { label: 'Todos', value: 'todos' },
   { label: 'Pendientes', value: 'pre_aprobado' },
@@ -60,16 +61,17 @@ export default function AllRegistrosPage() {
           {/* MOBILE: cards */}
           <div className="flex flex-col gap-3 sm:hidden">
             {registros.map((r: any) => (
-              <div key={r._id.toString()} className="rounded-xl px-4 py-3" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
+              <Link
+                key={r._id.toString()}
+                href={`/auditor/aprobaciones/${r._id}`}
+                className="block rounded-xl px-4 py-3 hover:bg-[#1c2128] transition-colors"
+                style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-medium" style={{ color: '#8b949e' }}>
                     {format(new Date(r.fecha), 'dd MMM yyyy', { locale: es })}
                   </span>
-                  {r.status === 'pre_aprobado' ? (
-                    <Link href={`/auditor/aprobaciones/${r._id}`}><StatusBadge status={r.status as RegistroStatus} /></Link>
-                  ) : (
-                    <StatusBadge status={r.status as RegistroStatus} />
-                  )}
+                  <StatusBadge status={r.status as RegistroStatus} />
                 </div>
                 <p className="text-sm font-semibold text-white truncate">{r.proyectoNombre || '—'}</p>
                 <p className="text-xs mb-2" style={{ color: '#8b949e' }}>{r.clienteNombre || '—'}</p>
@@ -79,7 +81,10 @@ export default function AllRegistrosPage() {
                   {r.horasTotalesDec ? <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#21262d', color: 'white' }}>{r.horasTotalesDec}h</span> : null}
                   {r.kmRecorridos ? <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#21262d', color: '#8b949e' }}>{r.kmRecorridos} km</span> : null}
                 </div>
-              </div>
+                <div className="mt-2 text-right">
+                  <span className="text-xs" style={{ color: '#1d6fb8' }}>Ver detalle →</span>
+                </div>
+              </Link>
             ))}
           </div>
 
@@ -89,14 +94,14 @@ export default function AllRegistrosPage() {
               <table className="w-full">
                 <thead>
                   <tr style={{ borderBottom: '1px solid #21262d' }}>
-                    {['Fecha', 'Proyecto', 'Cliente', 'Tipo', 'Encargado', 'HH', 'KM', 'Estado'].map(h => (
+                    {['Fecha', 'Proyecto', 'Cliente', 'Tipo', 'Encargado', 'HH', 'KM', 'Estado', ''].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: '#8b949e' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: '#21262d' }}>
                   {registros.map((r: any) => (
-                    <tr key={r._id.toString()} className="hover:bg-[#1c2128] transition-colors">
+                    <tr key={r._id.toString()} className="hover:bg-[#1c2128] transition-colors cursor-pointer">
                       <td className="px-4 py-3 text-sm text-white whitespace-nowrap">{format(new Date(r.fecha), 'dd/MM/yy', { locale: es })}</td>
                       <td className="px-4 py-3 text-sm text-white max-w-[180px] truncate">{r.proyectoNombre || '—'}</td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap" style={{ color: '#8b949e' }}>{r.clienteNombre || '—'}</td>
@@ -105,11 +110,16 @@ export default function AllRegistrosPage() {
                       <td className="px-4 py-3 text-sm text-white whitespace-nowrap">{r.horasTotalesDec ? `${r.horasTotalesDec}h` : '—'}</td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap" style={{ color: '#8b949e' }}>{r.kmRecorridos || '—'}</td>
                       <td className="px-4 py-3">
-                        {r.status === 'pre_aprobado' ? (
-                          <Link href={`/auditor/aprobaciones/${r._id}`}><StatusBadge status={r.status as RegistroStatus} /></Link>
-                        ) : (
-                          <StatusBadge status={r.status as RegistroStatus} />
-                        )}
+                        <StatusBadge status={r.status as RegistroStatus} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/auditor/aprobaciones/${r._id}`}
+                          className="text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                          style={{ backgroundColor: '#21262d', color: '#8b949e' }}
+                        >
+                          Ver detalle →
+                        </Link>
                       </td>
                     </tr>
                   ))}
