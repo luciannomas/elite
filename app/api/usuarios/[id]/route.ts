@@ -13,9 +13,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     await connectDB();
     const { id } = await params;
     const body = await req.json();
-    if (!body.password) delete body.password;
-    const user = await User.findByIdAndUpdate(id, body, { new: true });
-    return NextResponse.json({ success: true, data: user });
+
+    // Usar findById + save() para que el pre-save hook de bcrypt se ejecute
+    const user = await User.findById(id).select('+password');
+    if (!user) return NextResponse.json({ success: false, error: 'Usuario no encontrado' }, { status: 404 });
+
+    user.name = body.name ?? user.name;
+    user.email = body.email ?? user.email;
+    user.role = body.role ?? user.role;
+    user.active = body.active ?? user.active;
+    if (body.password) user.password = body.password; // hook lo hashea
+
+    await user.save();
+    const { password: _pw, ...data } = user.toObject();
+    return NextResponse.json({ success: true, data });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

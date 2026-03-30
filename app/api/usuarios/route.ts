@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
     await connectDB();
     const body = await req.json();
     const user = await User.create(body);
-    return NextResponse.json({ success: true, data: { ...user.toObject(), password: undefined } }, { status: 201 });
+    const { password: _pw, ...data } = user.toObject();
+    return NextResponse.json({ success: true, data }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });
   }
