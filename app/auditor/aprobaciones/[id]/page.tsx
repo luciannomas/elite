@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, X, Loader2, ArrowLeft, MapPin, Clock, Truck, Users } from 'lucide-react';
+import { Check, X, Loader2, ArrowLeft, MapPin, Clock, Truck, Users, RotateCcw } from 'lucide-react';
 import StatusBadge from '@/components/registros/StatusBadge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -25,7 +25,7 @@ export default function AprobacionDetailPage() {
   const [registro, setRegistro] = useState<IRegistro | null>(null);
   const [loading, setLoading] = useState(true);
   const [motivo, setMotivo] = useState('');
-  const [acting, setActing] = useState<'aprobar' | 'rechazar' | null>(null);
+  const [acting, setActing] = useState<'aprobar' | 'rechazar' | 'revertir' | null>(null);
 
   useEffect(() => {
     fetch(`/api/registros/${id}`)
@@ -36,7 +36,7 @@ export default function AprobacionDetailPage() {
       });
   }, [id]);
 
-  async function handleAction(action: 'aprobar' | 'rechazar') {
+  async function handleAction(action: 'aprobar' | 'rechazar' | 'revertir') {
     if (action === 'rechazar' && !motivo.trim()) {
       toast.error('Ingresá el motivo del rechazo');
       return;
@@ -49,16 +49,18 @@ export default function AprobacionDetailPage() {
     });
     const json = await res.json();
     if (json.success) {
-      const newStatus = action === 'aprobar' ? 'aprobado' : 'rechazado';
+      const newStatus = action === 'aprobar' ? 'aprobado' : action === 'rechazar' ? 'rechazado' : 'pre_aprobado';
       setRegistro(prev => prev ? {
         ...prev,
         status: newStatus as any,
         rechazadoMotivo: action === 'rechazar' ? motivo : undefined,
-        approvedAt: new Date().toISOString(),
+        approvedAt: action === 'aprobar' ? new Date().toISOString() : undefined,
       } : null);
-      toast.success(action === 'aprobar' ? 'Registro aprobado ✓' : 'Registro rechazado');
+      setMotivo('');
+      const msgs = { aprobar: 'Registro aprobado ✓', rechazar: 'Registro rechazado', revertir: 'Revertido a pendiente' };
+      toast.success(msgs[action]);
       setActing(null);
-      setTimeout(() => router.push('/auditor/aprobaciones'), 1500);
+      if (action !== 'revertir') setTimeout(() => router.push('/auditor/aprobaciones'), 1500);
     } else {
       toast.error(json.error || 'Error al procesar');
       setActing(null);
@@ -75,7 +77,7 @@ export default function AprobacionDetailPage() {
 
   if (!registro) return <div className="p-6 text-white">Registro no encontrado</div>;
 
-  const canAct = registro.status === 'pre_aprobado';
+  const canAct = true; // auditor puede actuar sobre cualquier estado
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -125,13 +127,25 @@ export default function AprobacionDetailPage() {
 
           <div className="rounded-xl px-5 py-4" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
             <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: '#8b949e' }}>Tareas</h3>
-            <p className="text-sm text-white leading-relaxed">{registro.tareaTexto || '—'}</p>
+            <p className="text-sm text-white leading-relaxed whitespace-pre-wrap">{registro.tareaTexto || '—'}</p>
           </div>
 
           <div className="rounded-xl px-5 py-4" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
             <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: '#8b949e' }}>Personal y Vehículo</h3>
             <DetailRow label="Encargado" value={registro.encargadoNombre} />
-            <DetailRow label="Personal a cargo" value={registro.personalACargo} />
+            {registro.personalACargo && (
+              <div style={{ borderBottom: '1px solid #21262d', paddingTop: 10, paddingBottom: 10 }}>
+                <span className="text-sm" style={{ color: '#8b949e' }}>Personal a cargo</span>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {registro.personalACargo.split(',').map(p => p.trim()).filter(Boolean).map(nombre => (
+                    <span key={nombre} className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: '#21262d', color: '#e6edf3', border: '1px solid #30363d' }}>
+                      {nombre}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <DetailRow label="Nº personas" value={registro.nPersonas} />
             <DetailRow label="Vehículo" value={registro.vehiculoPatente} />
             <DetailRow label="KM inicial" value={registro.kmInicial} />
             <DetailRow label="KM final" value={registro.kmFinal} />
@@ -165,19 +179,28 @@ export default function AprobacionDetailPage() {
         </div>
 
         <div className="space-y-4">
-          {canAct ? (
-            <div className="rounded-xl p-5 sticky top-6" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
-              <h3 className="font-semibold text-white mb-4">Acción de revisión</h3>
+          <div className="rounded-xl p-5 sticky top-6 space-y-3" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold text-white">Acción de revisión</h3>
+              <StatusBadge status={registro.status as RegistroStatus} />
+            </div>
+
+            {/* Aprobar — visible si no está aprobado */}
+            {registro.status !== 'aprobado' && (
               <button
                 onClick={() => handleAction('aprobar')}
                 disabled={acting !== null}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-semibold text-white mb-3 transition-colors disabled:opacity-60"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-60"
                 style={{ backgroundColor: '#238636' }}
               >
                 {acting === 'aprobar' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Aprobar registro
               </button>
-              <div style={{ borderTop: '1px solid #21262d', paddingTop: 16 }}>
+            )}
+
+            {/* Motivo + Rechazar — visible si no está rechazado */}
+            {registro.status !== 'rechazado' && (
+              <div style={{ borderTop: '1px solid #21262d', paddingTop: 12 }}>
                 <label className="block text-sm mb-2" style={{ color: '#8b949e' }}>Motivo de rechazo</label>
                 <textarea
                   value={motivo}
@@ -197,23 +220,35 @@ export default function AprobacionDetailPage() {
                   Rechazar registro
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-xl p-5" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
-              <h3 className="font-semibold text-white mb-3">Estado</h3>
-              <StatusBadge status={registro.status as RegistroStatus} />
-              {registro.approvedAt && (
-                <p className="text-xs mt-3" style={{ color: '#8b949e' }}>
-                  {registro.status === 'aprobado' ? 'Aprobado' : 'Rechazado'} el {format(new Date(registro.approvedAt), 'dd/MM/yyyy HH:mm', { locale: es })}
-                </p>
-              )}
-              {registro.rechazadoMotivo && (
-                <div className="mt-3 p-3 rounded-lg" style={{ backgroundColor: 'rgba(218,54,51,0.1)', border: '1px solid rgba(218,54,51,0.2)' }}>
-                  <p className="text-xs" style={{ color: '#f85149' }}>Motivo: {registro.rechazadoMotivo}</p>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+
+            {/* Revertir a pendiente — visible si ya fue procesado */}
+            {registro.status !== 'pre_aprobado' && (
+              <div style={{ borderTop: '1px solid #21262d', paddingTop: 12 }}>
+                <button
+                  onClick={() => handleAction('revertir')}
+                  disabled={acting !== null}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+                  style={{ backgroundColor: 'rgba(139,148,158,0.1)', color: '#8b949e', border: '1px solid #30363d' }}
+                >
+                  {acting === 'revertir' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Revertir a pendiente
+                </button>
+              </div>
+            )}
+
+            {/* Info de estado actual */}
+            {registro.approvedAt && registro.status !== 'pre_aprobado' && (
+              <p className="text-xs pt-1" style={{ color: '#8b949e' }}>
+                {registro.status === 'aprobado' ? 'Aprobado' : 'Rechazado'} el {format(new Date(registro.approvedAt), 'dd/MM/yyyy HH:mm', { locale: es })}
+              </p>
+            )}
+            {registro.rechazadoMotivo && registro.status === 'rechazado' && (
+              <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(218,54,51,0.1)', border: '1px solid rgba(218,54,51,0.2)' }}>
+                <p className="text-xs" style={{ color: '#f85149' }}>Motivo: {registro.rechazadoMotivo}</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

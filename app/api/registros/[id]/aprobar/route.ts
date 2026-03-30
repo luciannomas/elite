@@ -15,22 +15,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const { action, motivo } = await req.json();
 
-    if (!['aprobar', 'rechazar'].includes(action)) {
+    if (!['aprobar', 'rechazar', 'revertir'].includes(action)) {
       return NextResponse.json({ success: false, error: 'Acción inválida' }, { status: 400 });
     }
 
-    // ID de mock — responder éxito sin tocar DB (cliente persiste en localStorage)
-    if (id.startsWith('m')) {
-      return NextResponse.json({
-        success: true,
-        data: { _id: id, status: action === 'aprobar' ? 'aprobado' : 'rechazado', mock: true },
-      });
-    }
-
     await connectDB();
-    const update: any = action === 'aprobar'
-      ? { status: 'aprobado', approvedBy: session.user.id, approvedAt: new Date(), rechazadoMotivo: undefined }
-      : { status: 'rechazado', rechazadoMotivo: motivo || 'Sin motivo especificado', approvedBy: undefined, approvedAt: undefined };
+    const update: any =
+      action === 'aprobar'
+        ? { status: 'aprobado', approvedBy: session.user.id, approvedAt: new Date(), rechazadoMotivo: null }
+        : action === 'rechazar'
+        ? { status: 'rechazado', rechazadoMotivo: motivo || 'Sin motivo especificado', approvedBy: null, approvedAt: null }
+        : { status: 'pre_aprobado', rechazadoMotivo: null, approvedBy: null, approvedAt: null };
 
     const registro = await Registro.findByIdAndUpdate(id, update, { new: true });
     if (!registro) return NextResponse.json({ success: false, error: 'Registro no encontrado' }, { status: 404 });
