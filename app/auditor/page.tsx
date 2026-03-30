@@ -7,59 +7,33 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { RegistroStatus } from '@/types';
-import { mockRegistros, mockKPIs } from '@/lib/mock-data';
-import { getMockStatus } from '@/lib/mock-status';
 
 export default function AuditorDashboard() {
   const [data, setData] = useState({
-    pendientes: mockKPIs.pendientes,
-    aprobados: mockKPIs.aprobados,
-    rechazados: mockKPIs.rechazados,
-    hhTotales: mockKPIs.hhTotales,
-    hhCampo: mockKPIs.hhCampo,
-    kmTotales: mockKPIs.kmTotales,
-    ultimosPendientes: mockRegistros.filter(r => r.status === 'pre_aprobado') as any[],
+    pendientes: 0,
+    aprobados: 0,
+    rechazados: 0,
+    hhTotales: 0,
+    hhCampo: 0,
+    kmTotales: 0,
+    ultimosPendientes: [] as any[],
   });
 
   useEffect(() => {
-    const mockStatus = getMockStatus();
-
-    // Aplicar overrides de localStorage sobre datos mock
-    const withOverrides = mockRegistros.map(r => {
-      const override = mockStatus[r._id];
-      return override ? { ...r, status: override.status } : r;
-    });
-
-    const pendientes = withOverrides.filter(r => r.status === 'pre_aprobado').length;
-    const aprobados = withOverrides.filter(r => r.status === 'aprobado').length;
-    const rechazados = withOverrides.filter(r => r.status === 'rechazado').length;
-    const aprobadosData = withOverrides.filter(r => r.status === 'aprobado');
-    const hhTotales = aprobadosData.reduce((s, r) => s + r.horasTotalesDec, 0);
-    const hhCampo = aprobadosData.reduce((s, r) => s + r.horasSitioDec, 0);
-    const kmTotales = aprobadosData.reduce((s, r) => s + r.kmRecorridos, 0);
-    const ultimosPendientes = withOverrides.filter(r => r.status === 'pre_aprobado').slice(0, 6);
-
-    // Intentar obtener datos reales de la API
-    fetch('/api/metricas')
-      .then(r => r.json())
-      .then(res => {
-        if (res.success) {
-          setData({
-            pendientes: res.data.pendientes ?? pendientes,
-            aprobados: res.data.aprobados ?? aprobados,
-            rechazados: res.data.rechazados ?? rechazados,
-            hhTotales: res.data.hhTotales ?? hhTotales,
-            hhCampo: res.data.hhCampo ?? hhCampo,
-            kmTotales: res.data.kmTotales ?? kmTotales,
-            ultimosPendientes,
-          });
-        } else {
-          setData({ pendientes, aprobados, rechazados, hhTotales, hhCampo, kmTotales, ultimosPendientes });
-        }
-      })
-      .catch(() => {
-        setData({ pendientes, aprobados, rechazados, hhTotales, hhCampo, kmTotales, ultimosPendientes });
+    Promise.all([
+      fetch('/api/metricas').then(r => r.json()).catch(() => null),
+      fetch('/api/registros?status=pre_aprobado&limit=6').then(r => r.json()).catch(() => null),
+    ]).then(([metricas, pendientesRes]) => {
+      setData({
+        pendientes: metricas?.data?.pendientes ?? 0,
+        aprobados: metricas?.data?.aprobados ?? 0,
+        rechazados: metricas?.data?.rechazados ?? 0,
+        hhTotales: metricas?.data?.hhTotales ?? 0,
+        hhCampo: metricas?.data?.hhCampo ?? 0,
+        kmTotales: metricas?.data?.kmTotales ?? 0,
+        ultimosPendientes: pendientesRes?.data ?? [],
       });
+    });
   }, []);
 
   const productividad = data.hhTotales > 0 ? Math.round((data.hhCampo / data.hhTotales) * 100) : 0;

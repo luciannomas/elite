@@ -6,44 +6,17 @@ import { es } from 'date-fns/locale';
 import Link from 'next/link';
 import type { RegistroStatus } from '@/types';
 import { ChevronRight } from 'lucide-react';
-import { mockRegistros } from '@/lib/mock-data';
-import { getMockStatus } from '@/lib/mock-status';
 
 export default function AprobacionesPage() {
   const [pendientes, setPendientes] = useState<any[]>([]);
 
   useEffect(() => {
-    const mockStatus = getMockStatus();
-
-    // Intentar cargar desde API
     fetch('/api/registros?status=pre_aprobado')
       .then(r => r.json())
       .then(res => {
-        if (res.success && res.data?.length > 0) {
-          // Con DB: filtrar los que siguen pendientes
-          const data = res.data.filter((r: any) => {
-            const id = String(r._id);
-            const override = mockStatus[id]?.status;
-            return !override; // si hay override, fue procesado → excluir de pendientes
-          });
-          setPendientes(data);
-        } else {
-          // Sin DB: usar mock + aplicar overrides de localStorage
-          const data = mockRegistros.filter(r => {
-            const override = mockStatus[r._id]?.status;
-            return !override; // si hay override, fue procesado → excluir de pendientes
-          });
-          setPendientes(data);
-        }
+        if (res.success) setPendientes(res.data || []);
       })
-      .catch(() => {
-        const mockStatus = getMockStatus();
-        const data = mockRegistros.filter(r => {
-          const override = mockStatus[r._id]?.status;
-          return !override;
-        });
-        setPendientes(data);
-      });
+      .catch(() => {});
   }, []);
 
   return (

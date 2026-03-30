@@ -8,7 +8,6 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { IRegistro, RegistroStatus } from '@/types';
 import Link from 'next/link';
-import { getMockStatus, setMockStatus } from '@/lib/mock-status';
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
   if (!value && value !== 0) return null;
@@ -29,22 +28,12 @@ export default function AprobacionDetailPage() {
   const [acting, setActing] = useState<'aprobar' | 'rechazar' | null>(null);
 
   useEffect(() => {
-    fetch(`/api/registros/${id}`).then(r => r.json()).then(res => {
-      if (res.success) {
-        // Si es mock, aplicar estado persistido en localStorage
-        const data = res.data;
-        if (typeof id === 'string' && id.startsWith('m')) {
-          const stored = getMockStatus();
-          if (stored[id]) {
-            data.status = stored[id].status;
-            data.rechazadoMotivo = stored[id].motivo;
-            data.approvedAt = stored[id].at;
-          }
-        }
-        setRegistro(data);
-      }
-      setLoading(false);
-    });
+    fetch(`/api/registros/${id}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) setRegistro(res.data);
+        setLoading(false);
+      });
   }, [id]);
 
   async function handleAction(action: 'aprobar' | 'rechazar') {
@@ -61,24 +50,14 @@ export default function AprobacionDetailPage() {
     const json = await res.json();
     if (json.success) {
       const newStatus = action === 'aprobar' ? 'aprobado' : 'rechazado';
-      const now = new Date().toISOString();
-
-      // Persistir en localStorage para mock IDs
-      if (typeof id === 'string' && id.startsWith('m')) {
-        setMockStatus(id, newStatus as 'aprobado' | 'rechazado', motivo);
-      }
-
-      // Actualizar el estado local para que se vea el cambio inmediatamente
       setRegistro(prev => prev ? {
         ...prev,
         status: newStatus as any,
         rechazadoMotivo: action === 'rechazar' ? motivo : undefined,
-        approvedAt: now,
+        approvedAt: new Date().toISOString(),
       } : null);
-
       toast.success(action === 'aprobar' ? 'Registro aprobado ✓' : 'Registro rechazado');
       setActing(null);
-      // Redirigir después de 1.5s para que el usuario vea el nuevo estado
       setTimeout(() => router.push('/auditor/aprobaciones'), 1500);
     } else {
       toast.error(json.error || 'Error al procesar');
@@ -116,9 +95,7 @@ export default function AprobacionDetailPage() {
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Detail column */}
         <div className="md:col-span-2 space-y-4">
-          {/* Overview cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { icon: Clock, label: 'HH Totales', val: `${registro.horasTotalesDec || 0}h` },
@@ -134,7 +111,6 @@ export default function AprobacionDetailPage() {
             ))}
           </div>
 
-          {/* Details */}
           <div className="rounded-xl px-5 py-4" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
             <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: '#8b949e' }}>Jornada</h3>
             <DetailRow label="Fecha" value={registro.fecha ? format(new Date(registro.fecha), 'dd/MM/yyyy', { locale: es }) : '—'} />
@@ -188,12 +164,10 @@ export default function AprobacionDetailPage() {
           )}
         </div>
 
-        {/* Action panel */}
         <div className="space-y-4">
           {canAct ? (
             <div className="rounded-xl p-5 sticky top-6" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
               <h3 className="font-semibold text-white mb-4">Acción de revisión</h3>
-
               <button
                 onClick={() => handleAction('aprobar')}
                 disabled={acting !== null}
@@ -203,7 +177,6 @@ export default function AprobacionDetailPage() {
                 {acting === 'aprobar' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Aprobar registro
               </button>
-
               <div style={{ borderTop: '1px solid #21262d', paddingTop: 16 }}>
                 <label className="block text-sm mb-2" style={{ color: '#8b949e' }}>Motivo de rechazo</label>
                 <textarea

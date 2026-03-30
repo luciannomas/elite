@@ -153,6 +153,7 @@ export default function NuevaJornadaPage() {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [kmLoading, setKmLoading] = useState(false);
   const [personalSearch, setPersonalSearch] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -425,12 +426,35 @@ export default function NuevaJornadaPage() {
           )}
 
           <SelectField
-            label="Vehículo" value={data.vehiculoPatente} onChange={set('vehiculoPatente')}
+            label="Vehículo" value={data.vehiculoPatente}
+            onChange={async (patente: string) => {
+              set('vehiculoPatente')(patente);
+              if (!patente) return;
+              setKmLoading(true);
+              try {
+                const res = await fetch(`/api/registros/ultimo-km?patente=${encodeURIComponent(patente)}`);
+                const json = await res.json();
+                if (json.success && json.kmFinal) {
+                  set('kmInicial')(String(json.kmFinal));
+                }
+              } catch {}
+              finally { setKmLoading(false); }
+            }}
             options={catalog?.vehiculos.map(v => v.patente) || []}
+            placeholder={catalogLoading ? 'Cargando...' : 'Seleccionar vehículo...'}
           />
 
           <div className="grid grid-cols-2 gap-4">
-            <TextField label="KM inicial (odómetro)" value={data.kmInicial} onChange={set('kmInicial')} type="number" placeholder="160000" />
+            <div>
+              <TextField
+                label="KM inicial (odómetro)"
+                value={data.kmInicial}
+                onChange={set('kmInicial')}
+                type="number"
+                placeholder={kmLoading ? 'Cargando último KM...' : '160000'}
+              />
+              {kmLoading && <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Buscando último KM registrado...</p>}
+            </div>
             <TextField label="KM final (odómetro)" value={data.kmFinal} onChange={set('kmFinal')} type="number" placeholder="160350" />
           </div>
 

@@ -6,9 +6,6 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { RegistroStatus } from '@/types';
 import Link from 'next/link';
-import { mockRegistros } from '@/lib/mock-data';
-import { getMockStatus } from '@/lib/mock-status';
-
 const tabs = [
   { label: 'Todos', value: 'todos' },
   { label: 'Pendientes', value: 'pre_aprobado' },
@@ -22,39 +19,12 @@ export default function AllRegistrosPage() {
   const [registros, setRegistros] = useState<any[]>([]);
 
   useEffect(() => {
-    const mockStatus = getMockStatus();
-
     fetch(`/api/registros${currentStatus !== 'todos' ? `?status=${currentStatus}` : ''}`)
       .then(r => r.json())
       .then(res => {
-        if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-          // Con DB: aplicar overrides de localStorage sobre el status
-          const data = res.data.map((r: any) => {
-            const id = String(r._id);
-            const override = mockStatus[id];
-            return override ? { ...r, status: override.status, rechazadoMotivo: override.motivo } : r;
-          });
-          setRegistros(currentStatus === 'todos' ? data : data.filter((r: any) => r.status === currentStatus));
-        } else {
-          // Sin DB: usar mock con overrides aplicados
-          const withOverrides = mockRegistros.map(r => {
-            const override = mockStatus[r._id];
-            return override ? { ...r, status: override.status } : r;
-          });
-          const filtered = currentStatus === 'todos'
-            ? withOverrides
-            : withOverrides.filter(r => r.status === currentStatus);
-          setRegistros(filtered);
-        }
+        if (res.success) setRegistros(res.data || []);
       })
-      .catch(() => {
-        const mockStatus = getMockStatus();
-        const withOverrides = mockRegistros.map(r => {
-          const override = mockStatus[r._id];
-          return override ? { ...r, status: override.status } : r;
-        });
-        setRegistros(currentStatus === 'todos' ? withOverrides : withOverrides.filter(r => r.status === currentStatus));
-      });
+      .catch(() => {});
   }, [currentStatus]);
 
   return (
