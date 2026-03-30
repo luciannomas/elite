@@ -168,7 +168,7 @@ export default function NuevaJornadaPage() {
     if (cached && ts && Date.now() - parseInt(ts) < 86400000) {
       const parsed = JSON.parse(cached);
       // Invalidar caché si los datos críticos están vacíos
-      if (parsed?.personal?.length > 0 && parsed?.clientes?.length > 0) {
+      if (parsed?.personal?.length > 0 && parsed?.clientes?.length > 0 && parsed?.vehiculos?.length > 0) {
         setCatalog(parsed);
         setCatalogLoading(false);
         return;
@@ -429,11 +429,14 @@ export default function NuevaJornadaPage() {
             label="Vehículo" value={data.vehiculoPatente}
             onChange={async (patente: string) => {
               set('vehiculoPatente')(patente);
+              set('kmInicial')('');
               if (!patente) return;
               setKmLoading(true);
               try {
                 const res = await fetch(`/api/registros/ultimo-km?patente=${encodeURIComponent(patente)}`);
                 const json = await res.json();
+                // Si hay un último KM registrado, usarlo como KM inicial
+                // Si no hay registros previos para este vehículo, dejar vacío para ingreso manual
                 if (json.success && json.kmFinal) {
                   set('kmInicial')(String(json.kmFinal));
                 }
@@ -451,9 +454,11 @@ export default function NuevaJornadaPage() {
                 value={data.kmInicial}
                 onChange={set('kmInicial')}
                 type="number"
-                placeholder={kmLoading ? 'Cargando último KM...' : '160000'}
+                placeholder={kmLoading ? 'Buscando último KM...' : data.vehiculoPatente ? 'Sin registros previos — ingresá el KM' : 'Seleccioná un vehículo primero'}
               />
-              {kmLoading && <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Buscando último KM registrado...</p>}
+              {kmLoading && <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Buscando último odómetro registrado...</p>}
+              {!kmLoading && data.kmInicial && <p className="text-xs mt-1" style={{ color: '#238636' }}>✓ Tomado del último registro del vehículo</p>}
+              {!kmLoading && data.vehiculoPatente && !data.kmInicial && <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Sin registros previos — ingresá el valor del odómetro</p>}
             </div>
             <TextField label="KM final (odómetro)" value={data.kmFinal} onChange={set('kmFinal')} type="number" placeholder="160350" />
           </div>
