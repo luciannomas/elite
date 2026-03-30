@@ -42,18 +42,20 @@ const initialData = {
   observaciones: '',
 };
 
-const inputStyle = {
-  backgroundColor: '#21262d',
-  border: '1px solid #30363d',
-  borderRadius: 8,
-  color: 'white',
-  padding: '10px 12px',
-  width: '100%',
-  fontSize: 14,
-  outline: 'none',
-};
-
 const labelStyle = { color: '#8b949e', fontSize: 13, fontWeight: 500, marginBottom: 6, display: 'block' };
+
+function getInputStyle(error?: boolean) {
+  return {
+    backgroundColor: '#21262d',
+    border: `1px solid ${error ? '#da3633' : '#30363d'}`,
+    borderRadius: 8,
+    color: 'white',
+    padding: '10px 12px',
+    width: '100%',
+    fontSize: 14,
+    outline: 'none',
+  };
+}
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
@@ -63,23 +65,29 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
   );
 }
 
-function SelectField({ label, value, onChange, options, placeholder, required }: any) {
+function ErrorMsg({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return <p style={{ color: '#da3633', fontSize: 12, marginTop: 4 }}>{msg}</p>;
+}
+
+function SelectField({ label, value, onChange, options, placeholder, required, error }: any) {
   return (
     <div>
       <FieldLabel required={required}>{label}</FieldLabel>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        style={{ ...inputStyle, appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+        style={{ ...getInputStyle(!!error), appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
       >
         <option value="">{placeholder || 'Seleccionar...'}</option>
         {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
       </select>
+      <ErrorMsg msg={error} />
     </div>
   );
 }
 
-function TextField({ label, value, onChange, placeholder, type = 'text', required }: any) {
+function TextField({ label, value, onChange, placeholder, type = 'text', required, error }: any) {
   return (
     <div>
       <FieldLabel required={required}>{label}</FieldLabel>
@@ -88,15 +96,16 @@ function TextField({ label, value, onChange, placeholder, type = 'text', require
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        style={inputStyle}
-        onFocus={e => { e.target.style.borderColor = '#1d6fb8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,111,184,0.15)'; }}
-        onBlur={e => { e.target.style.borderColor = '#30363d'; e.target.style.boxShadow = 'none'; }}
+        style={getInputStyle(!!error)}
+        onFocus={e => { e.target.style.borderColor = error ? '#da3633' : '#1d6fb8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,111,184,0.15)'; }}
+        onBlur={e => { e.target.style.borderColor = error ? '#da3633' : '#30363d'; e.target.style.boxShadow = 'none'; }}
       />
+      <ErrorMsg msg={error} />
     </div>
   );
 }
 
-function TextAreaField({ label, value, onChange, placeholder, required }: any) {
+function TextAreaField({ label, value, onChange, placeholder, required, error }: any) {
   return (
     <div>
       <FieldLabel required={required}>{label}</FieldLabel>
@@ -105,12 +114,36 @@ function TextAreaField({ label, value, onChange, placeholder, required }: any) {
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
-        style={{ ...inputStyle, resize: 'vertical' }}
-        onFocus={e => { e.target.style.borderColor = '#1d6fb8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,111,184,0.15)'; }}
-        onBlur={e => { e.target.style.borderColor = '#30363d'; e.target.style.boxShadow = 'none'; }}
+        style={{ ...getInputStyle(!!error), resize: 'vertical' }}
+        onFocus={e => { e.target.style.borderColor = error ? '#da3633' : '#1d6fb8'; e.target.style.boxShadow = '0 0 0 3px rgba(29,111,184,0.15)'; }}
+        onBlur={e => { e.target.style.borderColor = error ? '#da3633' : '#30363d'; e.target.style.boxShadow = 'none'; }}
       />
+      <ErrorMsg msg={error} />
     </div>
   );
+}
+
+function validateStep(step: number, data: typeof initialData): Record<string, string> {
+  const errs: Record<string, string> = {};
+  if (step === 0) {
+    if (!data.fecha) errs.fecha = 'La fecha es obligatoria';
+    if (!data.clienteNombre) errs.clienteNombre = 'Seleccioná un cliente';
+    if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el tipo de tarea';
+    if (!data.tareaTexto.trim()) errs.tareaTexto = 'Describí las tareas realizadas';
+    if (data.estadoActividad === 'Stand-by' && !data.standByCategoria) errs.standByCategoria = 'Seleccioná una categoría de Stand-By';
+  }
+  if (step === 1) {
+    if (!data.encargadoNombre) errs.encargadoNombre = 'Seleccioná el encargado de cuadrilla';
+    if (data.estadoActividad === 'Stand-by') {
+      if (!data.standByHoras) errs.standByHoras = 'Ingresá las horas de Stand-By';
+      if (!data.standByCategoria) errs.standByCategoria = 'Seleccioná la categoría';
+    }
+  }
+  if (step === 2) {
+    if (!data.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
+    if (!data.horaFin) errs.horaFin = 'La hora de finalización es obligatoria';
+  }
+  return errs;
 }
 
 export default function NuevaJornadaPage() {
@@ -120,8 +153,12 @@ export default function NuevaJornadaPage() {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(false);
   const [personalSearch, setPersonalSearch] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const set = (key: string) => (val: any) => setData(prev => ({ ...prev, [key]: val }));
+  const set = (key: string) => (val: any) => {
+    setData(prev => ({ ...prev, [key]: val }));
+    setErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
+  };
 
   useEffect(() => {
     const cached = localStorage.getItem('elite_catalog');
@@ -158,7 +195,24 @@ export default function NuevaJornadaPage() {
 
   const isStandBy = data.estadoActividad === 'Stand-by';
 
+  function handleNext() {
+    const errs = validateStep(step, data);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      toast.error('Completá los campos obligatorios antes de continuar');
+      return;
+    }
+    setErrors({});
+    setStep(s => s + 1);
+  }
+
   async function handleSubmit() {
+    const errs = validateStep(2, data);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      toast.error('Completá los campos obligatorios');
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -222,7 +276,7 @@ export default function NuevaJornadaPage() {
         <div style={cardStyle} className="space-y-5">
           <h2 className="text-lg font-semibold text-white mb-2">Información de la Jornada</h2>
 
-          <TextField label="Fecha" value={data.fecha} onChange={set('fecha')} type="date" required />
+          <TextField label="Fecha" value={data.fecha} onChange={set('fecha')} type="date" required error={errors.fecha} />
 
           <div>
             <FieldLabel required>Trabajo realizado en</FieldLabel>
@@ -257,8 +311,10 @@ export default function NuevaJornadaPage() {
           )}
 
           <SelectField
-            label="Cliente" value={data.clienteNombre} onChange={(v: string) => { set('clienteNombre')(v); set('proyectoNombre')(''); }}
+            label="Cliente" value={data.clienteNombre}
+            onChange={(v: string) => { set('clienteNombre')(v); set('proyectoNombre')(''); }}
             options={catalog?.clientes.map(c => c.nombre) || []} placeholder="Seleccionar cliente..."
+            required error={errors.clienteNombre}
           />
 
           <div>
@@ -266,7 +322,7 @@ export default function NuevaJornadaPage() {
             <select
               value={data.proyectoNombre}
               onChange={e => set('proyectoNombre')(e.target.value)}
-              style={{ ...inputStyle, appearance: 'none' }}
+              style={{ ...getInputStyle(), appearance: 'none' }}
             >
               <option value="">Seleccionar proyecto...</option>
               {filteredProyectos.map(p => (
@@ -277,12 +333,12 @@ export default function NuevaJornadaPage() {
 
           <SelectField
             label="Tipo de tarea realizada" value={data.tipoProyecto} onChange={set('tipoProyecto')}
-            options={catalog?.tiposProyecto || []} required
+            options={catalog?.tiposProyecto || []} required error={errors.tipoProyecto}
           />
 
           <TextAreaField
             label="Descripción de las tareas realizadas" value={data.tareaTexto} onChange={set('tareaTexto')}
-            placeholder="Describí las tareas realizadas en la jornada..." required
+            placeholder="Describí las tareas realizadas en la jornada..." required error={errors.tareaTexto}
           />
 
           <TextField label="OV Odoo (opcional)" value={data.ovOdoo} onChange={set('ovOdoo')} placeholder="Número de orden" />
@@ -296,7 +352,7 @@ export default function NuevaJornadaPage() {
 
           <SelectField
             label="Encargado de cuadrilla" value={data.encargadoNombre} onChange={set('encargadoNombre')}
-            options={catalog?.personal.map(p => p.nombre) || []} required
+            options={catalog?.personal.map(p => p.nombre) || []} required error={errors.encargadoNombre}
           />
 
           <div>
@@ -306,7 +362,7 @@ export default function NuevaJornadaPage() {
               placeholder="Buscar personal..."
               value={personalSearch}
               onChange={e => setPersonalSearch(e.target.value)}
-              style={{ ...inputStyle, marginBottom: 8 }}
+              style={{ ...getInputStyle(), marginBottom: 8 }}
             />
             {personalSeleccionado.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
@@ -355,10 +411,10 @@ export default function NuevaJornadaPage() {
               <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(158,106,3,0.1)', border: '1px solid rgba(158,106,3,0.3)' }}>
                 <p className="text-sm font-medium" style={{ color: '#f0a500' }}>⚠ Jornada con Stand-By</p>
               </div>
-              <TextField label="Horas de Stand-By" value={data.standByHoras} onChange={set('standByHoras')} type="number" placeholder="8" />
+              <TextField label="Horas de Stand-By" value={data.standByHoras} onChange={set('standByHoras')} type="number" placeholder="8" required error={errors.standByHoras} />
               <SelectField
                 label="Categoría Stand-By" value={data.standByCategoria} onChange={set('standByCategoria')}
-                options={catalog?.categoriasStandBy || []}
+                options={catalog?.categoriasStandBy || []} required error={errors.standByCategoria}
               />
               <TextAreaField label="Detalle del Stand-By" value={data.standByDetalle} onChange={set('standByDetalle')} placeholder="Describí el motivo del stand-by..." />
             </>
@@ -374,10 +430,10 @@ export default function NuevaJornadaPage() {
           <div className="p-4 rounded-xl space-y-4" style={{ backgroundColor: '#1c2128', border: '1px solid #21262d' }}>
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8b949e' }}>Horarios</p>
             <div className="grid grid-cols-2 gap-4">
-              <TextField label="Hora de inicio (salida hotel)" value={data.horaInicio} onChange={set('horaInicio')} type="time" />
+              <TextField label="Hora de inicio (salida hotel)" value={data.horaInicio} onChange={set('horaInicio')} type="time" required error={errors.horaInicio} />
               <TextField label="Hora inicio campo (llegada mástil)" value={data.horaInicioField} onChange={set('horaInicioField')} type="time" />
               <TextField label="Hora fin campo (salida mástil)" value={data.horaFinField} onChange={set('horaFinField')} type="time" />
-              <TextField label="Hora finalización (llegada hotel)" value={data.horaFin} onChange={set('horaFin')} type="time" />
+              <TextField label="Hora finalización (llegada hotel)" value={data.horaFin} onChange={set('horaFin')} type="time" required error={errors.horaFin} />
             </div>
             {data.horaInicio && data.horaFin && (
               <div className="flex gap-6 pt-2" style={{ borderTop: '1px solid #21262d' }}>
@@ -421,7 +477,7 @@ export default function NuevaJornadaPage() {
       {/* Navigation */}
       <div className="flex items-center justify-between mt-6">
         <button
-          onClick={() => setStep(s => s - 1)}
+          onClick={() => { setErrors({}); setStep(s => s - 1); }}
           disabled={step === 0}
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-30"
           style={{ backgroundColor: '#21262d', color: '#e6edf3' }}
@@ -432,7 +488,7 @@ export default function NuevaJornadaPage() {
 
         {step < STEPS.length - 1 ? (
           <button
-            onClick={() => setStep(s => s + 1)}
+            onClick={handleNext}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors"
             style={{ backgroundColor: '#1d6fb8' }}
           >
