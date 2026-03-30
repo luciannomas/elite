@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight, Loader2, Check } from 'lucide-react';
 
@@ -12,8 +13,6 @@ type CatalogData = {
   tiposProyecto: string[];
   categoriasStandBy: string[];
 };
-
-const STEPS = ['Jornada', 'Personal y Vehículo', 'Tiempos y Notas'];
 
 const initialData = {
   fecha: new Date().toISOString().split('T')[0],
@@ -123,31 +122,51 @@ function TextAreaField({ label, value, onChange, placeholder, required, error }:
   );
 }
 
-function validateStep(step: number, data: typeof initialData): Record<string, string> {
+function validateStep(step: number, data: typeof initialData, esTaller: boolean): Record<string, string> {
   const errs: Record<string, string> = {};
-  if (step === 0) {
-    if (!data.fecha) errs.fecha = 'La fecha es obligatoria';
-    if (!data.clienteNombre) errs.clienteNombre = 'Seleccioná un cliente';
-    if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el tipo de tarea';
-    if (!data.tareaTexto.trim()) errs.tareaTexto = 'Describí las tareas realizadas';
-    if (data.estadoActividad === 'Stand-by' && !data.standByCategoria) errs.standByCategoria = 'Seleccioná una categoría de Stand-By';
-  }
-  if (step === 1) {
-    if (!data.encargadoNombre) errs.encargadoNombre = 'Seleccioná el encargado de cuadrilla';
-    if (data.estadoActividad === 'Stand-by') {
-      if (!data.standByHoras) errs.standByHoras = 'Ingresá las horas de Stand-By';
-      if (!data.standByCategoria) errs.standByCategoria = 'Seleccioná la categoría';
+  if (esTaller) {
+    if (step === 0) {
+      if (!data.fecha) errs.fecha = 'La fecha es obligatoria';
+      if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el tipo de tarea';
+      if (!data.tareaTexto.trim()) errs.tareaTexto = 'Describí las tareas realizadas';
     }
-  }
-  if (step === 2) {
-    if (!data.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
-    if (!data.horaFin) errs.horaFin = 'La hora de finalización es obligatoria';
+    if (step === 1) {
+      if (!data.horaInicio) errs.horaInicio = 'La hora de entrada es obligatoria';
+      if (!data.horaFin) errs.horaFin = 'La hora de salida es obligatoria';
+    }
+  } else {
+    if (step === 0) {
+      if (!data.fecha) errs.fecha = 'La fecha es obligatoria';
+      if (!data.clienteNombre) errs.clienteNombre = 'Seleccioná un cliente';
+      if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el tipo de tarea';
+      if (!data.tareaTexto.trim()) errs.tareaTexto = 'Describí las tareas realizadas';
+      if (data.estadoActividad === 'Stand-by' && !data.standByCategoria) errs.standByCategoria = 'Seleccioná una categoría de Stand-By';
+    }
+    if (step === 1) {
+      if (!data.encargadoNombre) errs.encargadoNombre = 'Seleccioná el encargado de cuadrilla';
+      if (data.estadoActividad === 'Stand-by') {
+        if (!data.standByHoras) errs.standByHoras = 'Ingresá las horas de Stand-By';
+        if (!data.standByCategoria) errs.standByCategoria = 'Seleccioná la categoría';
+      }
+    }
+    if (step === 2) {
+      if (!data.horaInicio) errs.horaInicio = 'La hora de inicio es obligatoria';
+      if (!data.horaFin) errs.horaFin = 'La hora de finalización es obligatoria';
+    }
   }
   return errs;
 }
 
+function calcHoras(inicio: string, fin: string): string {
+  if (!inicio || !fin) return '—';
+  const [h1, m1] = inicio.split(':').map(Number);
+  const [h2, m2] = fin.split(':').map(Number);
+  return ((h2 * 60 + m2 - (h1 * 60 + m1)) / 60).toFixed(1);
+}
+
 export default function NuevaJornadaPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [step, setStep] = useState(0);
   const [data, setData] = useState(initialData);
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
@@ -157,17 +176,27 @@ export default function NuevaJornadaPage() {
   const [personalSearch, setPersonalSearch] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const esTaller = data.trabajoRealizadoEn === 'taller';
+  const STEPS = esTaller
+    ? ['Taller', 'Horarios']
+    : ['Jornada', 'Personal y Vehículo', 'Tiempos y Notas'];
+
   const set = (key: string) => (val: any) => {
     setData(prev => ({ ...prev, [key]: val }));
     setErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
   };
+
+  function switchTipo(op: 'campo' | 'taller') {
+    setData(prev => ({ ...prev, trabajoRealizadoEn: op }));
+    setStep(0);
+    setErrors({});
+  }
 
   useEffect(() => {
     const cached = localStorage.getItem('elite_catalog');
     const ts = localStorage.getItem('elite_catalog_ts');
     if (cached && ts && Date.now() - parseInt(ts) < 86400000) {
       const parsed = JSON.parse(cached);
-      // Invalidar caché si los datos críticos están vacíos
       if (parsed?.personal?.length > 0 && parsed?.clientes?.length > 0 && parsed?.vehiculos?.length > 0) {
         setCatalog(parsed);
         setCatalogLoading(false);
@@ -208,7 +237,7 @@ export default function NuevaJornadaPage() {
   const isStandBy = data.estadoActividad === 'Stand-by';
 
   function handleNext() {
-    const errs = validateStep(step, data);
+    const errs = validateStep(step, data, esTaller);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       toast.error('Completá los campos obligatorios antes de continuar');
@@ -219,7 +248,8 @@ export default function NuevaJornadaPage() {
   }
 
   async function handleSubmit() {
-    const errs = validateStep(2, data);
+    const lastStep = esTaller ? 1 : 2;
+    const errs = validateStep(lastStep, data, esTaller);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       toast.error('Completá los campos obligatorios');
@@ -227,12 +257,14 @@ export default function NuevaJornadaPage() {
     }
     setLoading(true);
     try {
+      const responsableNombre = session?.user?.name || session?.user?.email || '';
       const payload = {
         ...data,
+        encargadoNombre: esTaller ? responsableNombre : data.encargadoNombre,
         kmInicial: data.kmInicial ? parseFloat(data.kmInicial) : undefined,
         kmFinal: data.kmFinal ? parseFloat(data.kmFinal) : undefined,
         standByHoras: data.standByHoras ? parseFloat(data.standByHoras) : undefined,
-        nPersonas: personalSeleccionado.length + 1,
+        nPersonas: esTaller ? 1 : personalSeleccionado.length + 1,
       };
       const res = await fetch('/api/registros', {
         method: 'POST',
@@ -250,6 +282,29 @@ export default function NuevaJornadaPage() {
   }
 
   const cardStyle = { backgroundColor: '#161b22', border: '1px solid #21262d', borderRadius: 16, padding: 24 };
+
+  // Toggle campo/taller — shared across all step 0 renders
+  const TipoToggle = (
+    <div>
+      <FieldLabel required>Trabajo realizado en</FieldLabel>
+      <div className="flex gap-2">
+        {(['campo', 'taller'] as const).map(op => (
+          <button
+            key={op}
+            onClick={() => switchTipo(op)}
+            className="flex-1 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors"
+            style={{
+              backgroundColor: data.trabajoRealizadoEn === op ? '#1d6fb8' : '#21262d',
+              color: data.trabajoRealizadoEn === op ? 'white' : '#8b949e',
+              border: `1px solid ${data.trabajoRealizadoEn === op ? '#1d6fb8' : '#30363d'}`,
+            }}
+          >
+            {op.charAt(0).toUpperCase() + op.slice(1)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
@@ -283,44 +338,97 @@ export default function NuevaJornadaPage() {
         ))}
       </div>
 
-      {/* Step 1 */}
-      {step === 0 && (
+      {/* ── TALLER STEP 0 ── */}
+      {step === 0 && esTaller && (
         <div style={cardStyle} className="space-y-5">
           <h2 className="text-lg font-semibold text-white mb-2">Información de la Jornada</h2>
 
           <TextField label="Fecha" value={data.fecha} onChange={set('fecha')} type="date" required error={errors.fecha} />
 
+          {TipoToggle}
+
+          <SelectField
+            label="Tipo de tarea realizada" value={data.tipoProyecto} onChange={set('tipoProyecto')}
+            options={catalog?.tiposProyecto || []}
+            placeholder={catalogLoading ? 'Cargando...' : 'Seleccionar...'}
+            required error={errors.tipoProyecto}
+          />
+
+          <TextAreaField
+            label="Descripción de las tareas realizadas" value={data.tareaTexto} onChange={set('tareaTexto')}
+            placeholder="Describí las tareas realizadas en el taller..." required error={errors.tareaTexto}
+          />
+
           <div>
-            <FieldLabel required>Trabajo realizado en</FieldLabel>
-            <div className="flex gap-2">
-              {['campo', 'taller'].map(op => (
-                <button
-                  key={op}
-                  onClick={() => set('trabajoRealizadoEn')(op)}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors"
-                  style={{
-                    backgroundColor: data.trabajoRealizadoEn === op ? '#1d6fb8' : '#21262d',
-                    color: data.trabajoRealizadoEn === op ? 'white' : '#8b949e',
-                    border: `1px solid ${data.trabajoRealizadoEn === op ? '#1d6fb8' : '#30363d'}`,
-                  }}
-                >
-                  {op.charAt(0).toUpperCase() + op.slice(1)}
-                </button>
-              ))}
+            <FieldLabel>Persona responsable</FieldLabel>
+            <div
+              className="px-3 py-2.5 rounded-lg text-sm"
+              style={{ backgroundColor: '#21262d', border: '1px solid #30363d', color: 'white' }}
+            >
+              {session?.user?.name || session?.user?.email || 'Usuario actual'}
             </div>
+            <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Se registra automáticamente con tu usuario</p>
           </div>
+        </div>
+      )}
+
+      {/* ── TALLER STEP 1 — Horarios ── */}
+      {step === 1 && esTaller && (
+        <div style={cardStyle} className="space-y-5">
+          <h2 className="text-lg font-semibold text-white mb-2">Horarios</h2>
+
+          <div className="grid grid-cols-2 gap-4">
+            <TextField label="Hora de entrada" value={data.horaInicio} onChange={set('horaInicio')} type="time" required error={errors.horaInicio} />
+            <TextField label="Hora de salida" value={data.horaFin} onChange={set('horaFin')} type="time" required error={errors.horaFin} />
+          </div>
+
+          {data.horaInicio && data.horaFin && (
+            <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'rgba(29,111,184,0.1)', border: '1px solid rgba(29,111,184,0.3)' }}>
+              <div>
+                <p className="text-xs" style={{ color: '#8b949e' }}>Horas trabajadas</p>
+                <p className="text-2xl font-bold text-white">{calcHoras(data.horaInicio, data.horaFin)}h</p>
+              </div>
+            </div>
+          )}
+
+          <TextAreaField label="Observaciones (opcional)" value={data.observaciones} onChange={set('observaciones')} placeholder="Cualquier novedad o comentario adicional..." />
+
+          {/* Summary */}
+          <div className="rounded-xl p-4 space-y-2" style={{ backgroundColor: '#0f1117', border: '1px solid #21262d' }}>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#8b949e' }}>Resumen</p>
+            {[
+              ['Fecha', data.fecha],
+              ['Lugar', 'Taller'],
+              ['Tipo de tarea', data.tipoProyecto || '—'],
+              ['Responsable', session?.user?.name || session?.user?.email || '—'],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between text-sm">
+                <span style={{ color: '#8b949e' }}>{k}</span>
+                <span className="text-white font-medium">{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── CAMPO STEP 0 ── */}
+      {step === 0 && !esTaller && (
+        <div style={cardStyle} className="space-y-5">
+          <h2 className="text-lg font-semibold text-white mb-2">Información de la Jornada</h2>
+
+          <TextField label="Fecha" value={data.fecha} onChange={set('fecha')} type="date" required error={errors.fecha} />
+
+          {TipoToggle}
 
           <SelectField
             label="Estado de actividad" value={data.estadoActividad} onChange={set('estadoActividad')}
             options={['Productivo', 'Stand-by', 'Viaje', 'Administrativo']} required
           />
 
-          {data.trabajoRealizadoEn === 'campo' && (
-            <SelectField
-              label="¿La cuadrilla llegó al mástil?" value={data.llego_al_mastil} onChange={set('llego_al_mastil')}
-              options={['si', 'no']}
-            />
-          )}
+          <SelectField
+            label="¿La cuadrilla llegó al mástil?" value={data.llego_al_mastil} onChange={set('llego_al_mastil')}
+            options={['si', 'no']}
+          />
 
           <SelectField
             label="Cliente" value={data.clienteNombre}
@@ -361,8 +469,8 @@ export default function NuevaJornadaPage() {
         </div>
       )}
 
-      {/* Step 2 */}
-      {step === 1 && (
+      {/* ── CAMPO STEP 1 — Personal y Vehículo ── */}
+      {step === 1 && !esTaller && (
         <div style={cardStyle} className="space-y-5">
           <h2 className="text-lg font-semibold text-white mb-2">Personal y Vehículo</h2>
 
@@ -418,9 +526,6 @@ export default function NuevaJornadaPage() {
                       </button>
                     ))}
                 </div>
-                {(catalog?.personal || []).filter(p => p.nombre !== data.encargadoNombre).length === 0 && !personalSearch && (
-                  <p className="text-sm text-center py-2" style={{ color: '#8b949e' }}>No hay personal disponible</p>
-                )}
               </div>
             </>
           )}
@@ -435,11 +540,7 @@ export default function NuevaJornadaPage() {
               try {
                 const res = await fetch(`/api/registros/ultimo-km?patente=${encodeURIComponent(patente)}`);
                 const json = await res.json();
-                // Si hay un último KM registrado, usarlo como KM inicial
-                // Si no hay registros previos para este vehículo, dejar vacío para ingreso manual
-                if (json.success && json.kmFinal) {
-                  set('kmInicial')(String(json.kmFinal));
-                }
+                if (json.success && json.kmFinal) set('kmInicial')(String(json.kmFinal));
               } catch {}
               finally { setKmLoading(false); }
             }}
@@ -454,7 +555,7 @@ export default function NuevaJornadaPage() {
                 value={data.kmInicial}
                 onChange={set('kmInicial')}
                 type="number"
-                placeholder={kmLoading ? 'Buscando último KM...' : data.vehiculoPatente ? 'Sin registros previos — ingresá el KM' : 'Seleccioná un vehículo primero'}
+                placeholder={kmLoading ? 'Buscando último KM...' : data.vehiculoPatente ? 'Sin registros previos' : 'Seleccioná un vehículo'}
               />
               {kmLoading && <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Buscando último odómetro registrado...</p>}
               {!kmLoading && data.kmInicial && <p className="text-xs mt-1" style={{ color: '#238636' }}>✓ Tomado del último registro del vehículo</p>}
@@ -479,8 +580,8 @@ export default function NuevaJornadaPage() {
         </div>
       )}
 
-      {/* Step 3 */}
-      {step === 2 && (
+      {/* ── CAMPO STEP 2 — Tiempos y Notas ── */}
+      {step === 2 && !esTaller && (
         <div style={cardStyle} className="space-y-5">
           <h2 className="text-lg font-semibold text-white mb-2">Tiempos y Notas</h2>
 
@@ -495,8 +596,8 @@ export default function NuevaJornadaPage() {
             {data.horaInicio && data.horaFin && (
               <div className="flex gap-6 pt-2" style={{ borderTop: '1px solid #21262d' }}>
                 {[
-                  { label: 'HH Totales', val: (() => { const [h1, m1] = data.horaInicio.split(':').map(Number); const [h2, m2] = data.horaFin.split(':').map(Number); return (((h2*60+m2)-(h1*60+m1))/60).toFixed(1); })() },
-                  { label: 'HH Campo', val: data.horaInicioField && data.horaFinField ? (() => { const [h1,m1]=data.horaInicioField.split(':').map(Number); const [h2,m2]=data.horaFinField.split(':').map(Number); return (((h2*60+m2)-(h1*60+m1))/60).toFixed(1); })() : '—' },
+                  { label: 'HH Totales', val: calcHoras(data.horaInicio, data.horaFin) },
+                  { label: 'HH Campo', val: data.horaInicioField && data.horaFinField ? calcHoras(data.horaInicioField, data.horaFinField) : '—' },
                 ].map(({ label, val }) => (
                   <div key={label}>
                     <p className="text-xs" style={{ color: '#8b949e' }}>{label}</p>
@@ -515,7 +616,7 @@ export default function NuevaJornadaPage() {
             <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#8b949e' }}>Resumen de la jornada</p>
             {[
               ['Fecha', data.fecha],
-              ['Lugar', data.trabajoRealizadoEn === 'campo' ? 'Campo' : 'Taller'],
+              ['Lugar', 'Campo'],
               ['Cliente', data.clienteNombre || '—'],
               ['Proyecto', data.proyectoNombre || '—'],
               ['Tipo', data.tipoProyecto || '—'],
