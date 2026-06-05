@@ -1,13 +1,66 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { Check, X, Loader2, ArrowLeft, MapPin, Clock, Truck, Users, RotateCcw } from 'lucide-react';
+import { Check, X, Loader2, ArrowLeft, MapPin, Clock, Truck, Users, RotateCcw, Pencil } from 'lucide-react';
 import StatusBadge from '@/components/registros/StatusBadge';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { IRegistro, RegistroStatus } from '@/types';
 import Link from 'next/link';
+
+function OvEditRow({ registroId, initialOv }: { registroId: string; initialOv?: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(initialOv || '');
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const res = await fetch(`/api/registros/${registroId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ovOdoo: value }),
+    }).then(r => r.json());
+    setSaving(false);
+    if (res.success) {
+      toast.success('OV actualizada');
+      setEditing(false);
+    } else {
+      toast.error(res.error || 'Error al guardar OV');
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between py-2.5" style={{ borderBottom: '1px solid #21262d' }}>
+      <span className="text-sm" style={{ color: '#8b949e' }}>OV Odoo</span>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <input
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            className="text-sm text-white px-2 py-1 rounded"
+            style={{ backgroundColor: '#21262d', border: '1px solid #1d6fb8', outline: 'none', width: 140 }}
+            autoFocus
+          />
+          <button onClick={save} disabled={saving} className="p-1 rounded hover:bg-[#21262d]">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: '#3fb950' }} /> : <Check className="w-3.5 h-3.5" style={{ color: '#3fb950' }} />}
+          </button>
+          <button onClick={() => { setEditing(false); setValue(initialOv || ''); }} className="p-1 rounded hover:bg-[#21262d]">
+            <X className="w-3.5 h-3.5" style={{ color: '#8b949e' }} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-white font-medium">{value || '—'}</span>
+          <button onClick={() => setEditing(true)} className="p-1 rounded hover:bg-[#21262d]">
+            <Pencil className="w-3.5 h-3.5" style={{ color: '#8b949e' }} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
   if (!value && value !== 0) return null;
@@ -22,19 +75,45 @@ function DetailRow({ label, value }: { label: string; value?: string | number | 
 export default function AprobacionDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { data: session } = useSession();
+  const isSuperAdmin = (session?.user as any)?.role === 'super_admin';
   const [registro, setRegistro] = useState<IRegistro | null>(null);
   const [loading, setLoading] = useState(true);
   const [motivo, setMotivo] = useState('');
   const [acting, setActing] = useState<'aprobar' | 'rechazar' | 'revertir' | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editData, setEditData] = useState<Partial<IRegistro>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch(`/api/registros/${id}`)
       .then(r => r.json())
       .then(res => {
-        if (res.success) setRegistro(res.data);
+        if (res.success) {
+          setRegistro(res.data);
+          setEditData(res.data);
+        }
         setLoading(false);
       });
   }, [id]);
+
+  async function handleSaveEdit() {
+    setSaving(true);
+    const res = await fetch(`/api/registros/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editData),
+    }).then(r => r.json());
+    setSaving(false);
+    if (res.success) {
+      setRegistro(res.data);
+      setEditData(res.data);
+      setEditMode(false);
+      toast.success('Registro actualizado');
+    } else {
+      toast.error(res.error || 'Error al guardar');
+    }
+  }
 
   async function handleAction(action: 'aprobar' | 'rechazar' | 'revertir') {
     if (action === 'rechazar' && !motivo.trim()) {
@@ -77,7 +156,7 @@ export default function AprobacionDetailPage() {
 
   if (!registro) return <div className="p-6 text-white">Registro no encontrado</div>;
 
-  const canAct = true; // auditor puede actuar sobre cualquier estado
+  const esTaller = registro.trabajoRealizadoEn === 'taller';
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -87,14 +166,91 @@ export default function AprobacionDetailPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-white">{registro.proyectoNombre || 'Sin proyecto'}</h1>
+            <h1 className="text-xl font-bold text-white">{registro.proyectoNombre || registro.tipoProyecto || 'Sin proyecto'}</h1>
             <StatusBadge status={registro.status as RegistroStatus} />
           </div>
           <p className="text-sm mt-0.5" style={{ color: '#8b949e' }}>
             {registro.clienteNombre} · {registro.fecha ? format(new Date(registro.fecha), 'dd MMMM yyyy', { locale: es }) : '—'}
           </p>
         </div>
+        {isSuperAdmin && (
+          <button
+            onClick={() => setEditMode(v => !v)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: editMode ? 'rgba(29,111,184,0.15)' : '#21262d',
+              color: editMode ? '#58a6ff' : '#8b949e',
+              border: `1px solid ${editMode ? 'rgba(29,111,184,0.4)' : '#30363d'}`,
+            }}
+          >
+            <Pencil className="w-4 h-4" />
+            {editMode ? 'Cancelar edición' : 'Editar'}
+          </button>
+        )}
       </div>
+
+      {/* Edit panel for super_admin */}
+      {editMode && isSuperAdmin && (
+        <div className="mb-6 p-5 rounded-xl space-y-4" style={{ backgroundColor: 'rgba(29,111,184,0.07)', border: '1px solid rgba(29,111,184,0.3)' }}>
+          <p className="text-sm font-semibold" style={{ color: '#58a6ff' }}>Modo edición — Super Admin</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              { key: 'clienteNombre', label: 'Cliente' },
+              { key: 'proyectoNombre', label: 'Proyecto / Mástil' },
+              { key: 'tipoProyecto', label: 'Tipo de tarea' },
+              { key: 'tareaTexto', label: 'Descripción tareas', multiline: true },
+              { key: 'encargadoNombre', label: 'Encargado' },
+              { key: 'vehiculoPatente', label: 'Vehículo' },
+              { key: 'horaInicio', label: 'Hora inicio', type: 'time' },
+              { key: 'horaInicioField', label: 'Hora inicio campo', type: 'time' },
+              { key: 'horaFinField', label: 'Hora fin campo', type: 'time' },
+              { key: 'horaFin', label: 'Hora fin', type: 'time' },
+              { key: 'kmInicial', label: 'KM inicial', type: 'number' },
+              { key: 'kmFinal', label: 'KM final', type: 'number' },
+              { key: 'observaciones', label: 'Observaciones', multiline: true },
+            ].map(({ key, label, type, multiline }: any) => (
+              <div key={key} className={multiline ? 'sm:col-span-2' : ''}>
+                <label className="block text-xs mb-1" style={{ color: '#8b949e' }}>{label}</label>
+                {multiline ? (
+                  <textarea
+                    value={(editData as any)[key] || ''}
+                    onChange={e => setEditData(d => ({ ...d, [key]: e.target.value }))}
+                    rows={3}
+                    className="w-full rounded-lg px-3 py-2 text-sm text-white resize-none"
+                    style={{ backgroundColor: '#21262d', border: '1px solid #30363d', outline: 'none' }}
+                  />
+                ) : (
+                  <input
+                    type={type || 'text'}
+                    value={(editData as any)[key] || ''}
+                    onChange={e => setEditData(d => ({ ...d, [key]: e.target.value }))}
+                    className="w-full rounded-lg px-3 py-2 text-sm text-white"
+                    style={{ backgroundColor: '#21262d', border: '1px solid #30363d', outline: 'none' }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: '#238636' }}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Guardar cambios
+            </button>
+            <button
+              onClick={() => { setEditMode(false); setEditData(registro); }}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: '#21262d', color: '#e6edf3' }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-4">
@@ -118,11 +274,17 @@ export default function AprobacionDetailPage() {
             <DetailRow label="Fecha" value={registro.fecha ? format(new Date(registro.fecha), 'dd/MM/yyyy', { locale: es }) : '—'} />
             <DetailRow label="Trabajo realizado en" value={registro.trabajoRealizadoEn === 'campo' ? 'Campo' : 'Taller'} />
             <DetailRow label="Estado actividad" value={registro.estadoActividad} />
-            <DetailRow label="Llegó al mástil" value={registro.llego_al_mastil === 'si' ? 'Sí' : 'No'} />
-            <DetailRow label="Cliente" value={registro.clienteNombre} />
-            <DetailRow label="Proyecto / Mástil" value={registro.proyectoNombre} />
-            <DetailRow label="Tipo de tarea" value={registro.tipoProyecto} />
-            <DetailRow label="OV Odoo" value={registro.ovOdoo} />
+            {registro.trabajoRealizadoEn !== 'taller' && (
+              <DetailRow label="Llegó al mástil" value={registro.llego_al_mastil === 'si' ? 'Sí' : 'No'} />
+            )}
+            {registro.trabajoRealizadoEn !== 'taller' && (
+              <DetailRow label="Cliente" value={registro.clienteNombre} />
+            )}
+            {registro.trabajoRealizadoEn !== 'taller' && (
+              <DetailRow label="Proyecto / Mástil" value={registro.proyectoNombre} />
+            )}
+            <DetailRow label={registro.trabajoRealizadoEn === 'taller' ? 'Lugar del taller' : 'Tipo de tarea'} value={registro.tipoProyecto} />
+            <OvEditRow registroId={id as string} initialOv={registro.ovOdoo} />
           </div>
 
           <div className="rounded-xl px-5 py-4" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
@@ -146,19 +308,32 @@ export default function AprobacionDetailPage() {
               </div>
             )}
             <DetailRow label="Nº personas" value={registro.nPersonas} />
-            <DetailRow label="Vehículo" value={registro.vehiculoPatente} />
-            <DetailRow label="KM inicial" value={registro.kmInicial} />
-            <DetailRow label="KM final" value={registro.kmFinal} />
-            <DetailRow label="KM recorridos" value={registro.kmRecorridos} />
+            {registro.trabajoRealizadoEn !== 'taller' && (
+              <>
+                <DetailRow label="Vehículo" value={registro.vehiculoPatente} />
+                <DetailRow label="KM inicial" value={registro.kmInicial} />
+                <DetailRow label="KM final" value={registro.kmFinal} />
+                <DetailRow label="KM recorridos" value={registro.kmRecorridos} />
+              </>
+            )}
           </div>
 
           <div className="rounded-xl px-5 py-4" style={{ backgroundColor: '#161b22', border: '1px solid #21262d' }}>
             <h3 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: '#8b949e' }}>Horarios</h3>
-            <DetailRow label="Inicio (salida hotel)" value={registro.horaInicio} />
-            <DetailRow label="Inicio campo (llegada mástil)" value={registro.horaInicioField} />
-            <DetailRow label="Fin campo (salida mástil)" value={registro.horaFinField} />
-            <DetailRow label="Finalización (llegada hotel)" value={registro.horaFin} />
-            <DetailRow label="Hospedaje" value={registro.hospedaje} />
+            {registro.trabajoRealizadoEn === 'taller' ? (
+              <>
+                <DetailRow label="Ingreso al taller" value={registro.horaInicio} />
+                <DetailRow label="Salida del taller" value={registro.horaFin} />
+              </>
+            ) : (
+              <>
+                <DetailRow label="Inicio (salida hotel)" value={registro.horaInicio} />
+                <DetailRow label="Inicio campo (llegada mástil)" value={registro.horaInicioField} />
+                <DetailRow label="Fin campo (salida mástil)" value={registro.horaFinField} />
+                <DetailRow label="Finalización (llegada hotel)" value={registro.horaFin} />
+                <DetailRow label="Hospedaje" value={registro.hospedaje} />
+              </>
+            )}
           </div>
 
           {(registro.standByHoras ?? 0) > 0 && (

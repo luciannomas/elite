@@ -122,12 +122,14 @@ function TextAreaField({ label, value, onChange, placeholder, required, error }:
   );
 }
 
+const TALLER_OPCIONES = ['Taller San José', 'Taller Madryn', 'Proyecto Integra'];
+
 function validateStep(step: number, data: typeof initialData, esTaller: boolean): Record<string, string> {
   const errs: Record<string, string> = {};
   if (esTaller) {
     if (step === 0) {
       if (!data.fecha) errs.fecha = 'La fecha es obligatoria';
-      if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el tipo de tarea';
+      if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el lugar del taller';
       if (!data.tareaTexto.trim()) errs.tareaTexto = 'Describí las tareas realizadas';
     }
     if (step === 1) {
@@ -140,13 +142,15 @@ function validateStep(step: number, data: typeof initialData, esTaller: boolean)
       if (!data.clienteNombre) errs.clienteNombre = 'Seleccioná un cliente';
       if (!data.tipoProyecto) errs.tipoProyecto = 'Seleccioná el tipo de tarea';
       if (!data.tareaTexto.trim()) errs.tareaTexto = 'Describí las tareas realizadas';
-      if (data.estadoActividad === 'Stand-by' && !data.standByCategoria) errs.standByCategoria = 'Seleccioná una categoría de Stand-By';
     }
     if (step === 1) {
       if (!data.encargadoNombre) errs.encargadoNombre = 'Seleccioná el encargado de cuadrilla';
       if (data.estadoActividad === 'Stand-by') {
         if (!data.standByHoras) errs.standByHoras = 'Ingresá las horas de Stand-By';
         if (!data.standByCategoria) errs.standByCategoria = 'Seleccioná la categoría';
+      }
+      if (data.kmInicial && data.kmFinal && parseFloat(data.kmFinal) < parseFloat(data.kmInicial)) {
+        errs.kmFinal = 'El KM final no puede ser menor al KM inicial';
       }
     }
     if (step === 2) {
@@ -348,9 +352,9 @@ export default function NuevaJornadaPage() {
           {TipoToggle}
 
           <SelectField
-            label="Tipo de tarea realizada" value={data.tipoProyecto} onChange={set('tipoProyecto')}
-            options={catalog?.tiposProyecto || []}
-            placeholder={catalogLoading ? 'Cargando...' : 'Seleccionar...'}
+            label="Lugar del taller" value={data.tipoProyecto} onChange={set('tipoProyecto')}
+            options={TALLER_OPCIONES}
+            placeholder="Seleccionar..."
             required error={errors.tipoProyecto}
           />
 
@@ -464,8 +468,6 @@ export default function NuevaJornadaPage() {
             label="Descripción de las tareas realizadas" value={data.tareaTexto} onChange={set('tareaTexto')}
             placeholder="Describí las tareas realizadas en la jornada..." required error={errors.tareaTexto}
           />
-
-          <TextField label="OV Odoo (opcional)" value={data.ovOdoo} onChange={set('ovOdoo')} placeholder="Número de orden" />
         </div>
       )}
 
@@ -561,7 +563,7 @@ export default function NuevaJornadaPage() {
               {!kmLoading && data.kmInicial && <p className="text-xs mt-1" style={{ color: '#238636' }}>✓ Tomado del último registro del vehículo</p>}
               {!kmLoading && data.vehiculoPatente && !data.kmInicial && <p className="text-xs mt-1" style={{ color: '#8b949e' }}>Sin registros previos — ingresá el valor del odómetro</p>}
             </div>
-            <TextField label="KM final (odómetro)" value={data.kmFinal} onChange={set('kmFinal')} type="number" placeholder="160350" />
+            <TextField label="KM final (odómetro)" value={data.kmFinal} onChange={set('kmFinal')} type="number" placeholder="160350" error={errors.kmFinal} />
           </div>
 
           {isStandBy && (
