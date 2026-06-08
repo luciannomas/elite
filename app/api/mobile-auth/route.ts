@@ -3,14 +3,14 @@ import connectDB, { isMongoDBAvailable } from '@/lib/mongodb';
 import User from '@/models/User';
 import { encode } from 'next-auth/jwt';
 
-const DEMO_USERS = [
+const DEMO_USERS: { id: string; email: string; name: string; role: 'jefe_cuadrilla' | 'auditor' | 'super_admin'; password: string }[] = [
   { id: 'demo-1', email: 'jefe@elite.com',    name: 'Amarilla Carlos',  role: 'jefe_cuadrilla', password: 'password123' },
   { id: 'demo-2', email: 'jefe2@elite.com',   name: 'Surra Juan',       role: 'jefe_cuadrilla', password: 'password123' },
   { id: 'demo-3', email: 'auditor@elite.com', name: 'Auditor Sistema',  role: 'auditor',         password: 'password123' },
   { id: 'demo-4', email: 'admin@elite.com',   name: 'Super Admin',      role: 'super_admin',     password: 'password123' },
 ];
 
-async function buildResponse(id: string, email: string, name: string, role: string) {
+async function buildResponse(id: string, email: string, name: string, role: 'jefe_cuadrilla' | 'auditor' | 'super_admin') {
   const token = await encode({
     token: { id, email, name, role, sub: id },
     secret: process.env.NEXTAUTH_SECRET || 'seguimiento-elite-secret-2026',
