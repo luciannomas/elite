@@ -10,55 +10,51 @@ const DEMO_USERS = [
   { id: 'demo-4', email: 'admin@elite.com',   name: 'Super Admin',      role: 'super_admin',     password: 'password123' },
 ];
 
+async function buildResponse(id: string, email: string, name: string, role: string) {
+  const token = await encode({
+    token: { id, email, name, role, sub: id },
+    secret: process.env.NEXTAUTH_SECRET || 'seguimiento-elite-secret-2026',
+  });
+  return NextResponse.json({ success: true, token, user: { id, name, email, role } });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
+
     if (!email || !password) {
       return NextResponse.json({ success: false, error: 'Email y contraseña requeridos' }, { status: 400 });
     }
 
-    let userId: string, userName: string, userEmail: string, userRole: string;
-
-    await connectDB();
-
-    if (isMongoDBAvailable()) {
-      const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-      if (!user) return NextResponse.json({ success: false, error: 'Credenciales incorrectas' }, { status: 401 });
-      if (!user.active) return NextResponse.json({ success: false, error: 'Usuario inactivo' }, { status: 401 });
-      const valid = await user.comparePassword(password);
-      if (!valid) return NextResponse.json({ success: false, error: 'Credenciales incorrectas' }, { status: 401 });
-      userId = user._id.toString();
-      userName = user.name;
-      userEmail = user.email;
-      userRole = user.role;
-    } else {
-      const demo = DEMO_USERS.find(u => u.email === email.toLowerCase());
-      if (!demo || demo.password !== password) {
-        return NextResponse.json({ success: false, error: 'Credenciales incorrectas' }, { status: 401 });
+    // Intentar con MongoDB
+    try {
+      await connectDB();
+      if (isMongoDBAvailable()) {
+        const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+        if (user) {
+          if (!user.active) return NextResponse.json({ success: false, error: 'Usuario inactivo' }, { status: 401 });
+          const valid = await user.comparePassword(password);
+          if (!valid) return NextResponse.json({ success: false, error: 'Credenciales incorrectas' }, { status: 401 });
+          await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+          return buildResponse(user._id.toString(), user.email, user.name, user.role);
+        }
       }
-      userId = demo.id;
-      userName = demo.name;
-      userEmail = demo.email;
-      userRole = demo.role;
+    } catch {
+      // MongoDB falló, caer al mock
     }
 
-    // Generar JWT token de NextAuth
-    const token = await encode({
-      token: { id: userId, email: userEmail, name: userName, role: userRole, sub: userId },
-      secret: process.env.NEXTAUTH_SECRET || 'elite-seguimiento-secret-2026',
-    });
+    // Fallback mock — siempre disponible para demo
+    const demo = DEMO_USERS.find(u => u.email === email.toLowerCase());
+    if (!demo || demo.password !== password) {
+      return NextResponse.json({ success: false, error: 'Credenciales incorrectas' }, { status: 401 });
+    }
+    return buildResponse(demo.id, demo.email, demo.name, demo.role);
 
-    return NextResponse.json({
-      success: true,
-      token,
-      user: { id: userId, name: userName, email: userEmail, role: userRole },
-    });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-// CORS preflight
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
